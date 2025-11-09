@@ -68,3 +68,14 @@ yarn-error.log
 # Helper scripts
 set-java-home.sh
 
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+.DS_Store
+

@@ -1,14 +1,32 @@
 // Card Types
 export enum CardType {
-  DUKE = 'DUKE',
-  CAPTAIN = 'CAPTAIN',
-  ASSASSIN = 'ASSASSIN',
-  AMBASSADOR = 'AMBASSADOR',
-  CONTESSA = 'CONTESSA',
+  DUKE = 'DUKE', // Conde
+  CAPTAIN = 'CAPTAIN', // Pirata
+  ASSASSIN = 'ASSASSIN', // Mercenário
+  AMBASSADOR = 'AMBASSADOR', // Diplomata
+  CONTESSA = 'CONTESSA', // Cortesã
+}
+
+// Função para obter o nome em português
+export function getCardTypeName(cardType: CardType): string {
+  switch (cardType) {
+    case CardType.DUKE:
+      return 'CONDE';
+    case CardType.CAPTAIN:
+      return 'PIRATA';
+    case CardType.ASSASSIN:
+      return 'MERCENÁRIO';
+    case CardType.AMBASSADOR:
+      return 'DIPLOMATA';
+    case CardType.CONTESSA:
+      return 'CORTESÃ';
+    default:
+      return cardType;
+  }
 }
 
 // Card State
-export interface Card {
+export interface CardState {
   type: CardType;
   revealed: boolean;
 }
@@ -18,7 +36,7 @@ export interface Player {
   id: string;
   name: string;
   coins: number;
-  cards: Card[]; // 2 cards
+  cards: CardState[]; // 2 cards
   isAlive: boolean;
   isCurrentPlayer: boolean;
 }

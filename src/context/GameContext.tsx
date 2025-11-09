@@ -23,33 +23,43 @@ const GameContext = createContext<GameContextType | undefined>(undefined);
 function gameReducer(state: GameState, action: GameAction): GameState {
   const game = new CoupGame(state);
 
-  switch (action.type) {
-    case 'INIT_GAME':
-      return game.initGame(action.payload);
+  try {
+    switch (action.type) {
+      case 'INIT_GAME':
+        if (!action.payload || action.payload.length < 2 || action.payload.length > 6) {
+          throw new Error('O jogo requer 2-6 jogadores');
+        }
+        return game.initGame(action.payload);
 
-    case 'EXECUTE_ACTION':
-      return game.executeAction(action.payload.action, action.payload.targetId);
+      case 'EXECUTE_ACTION':
+        return game.executeAction(action.payload.action, action.payload.targetId);
 
-    case 'CHALLENGE_ACTION':
-      return game.challengeAction(action.payload);
+      case 'CHALLENGE_ACTION':
+        return game.challengeAction(action.payload);
 
-    case 'BLOCK_ACTION':
-      return game.blockAction(action.payload.blockerId, action.payload.blockingCard);
+      case 'BLOCK_ACTION':
+        return game.blockAction(action.payload.blockerId, action.payload.blockingCard);
 
-    case 'SKIP_CHALLENGE':
-      return game.skipChallenge();
+      case 'SKIP_CHALLENGE':
+        return game.skipChallenge();
 
-    case 'SKIP_BLOCK':
-      return game.skipBlock();
+      case 'SKIP_BLOCK':
+        return game.skipBlock();
 
-    case 'SELECT_CARD_TO_LOSE':
-      return game.selectCardToLose(action.payload.playerId, action.payload.cardIndex);
+      case 'SELECT_CARD_TO_LOSE':
+        return game.selectCardToLose(action.payload.playerId, action.payload.cardIndex);
 
-    case 'RESET_GAME':
-      return new CoupGame().getState();
+      case 'RESET_GAME':
+        return new CoupGame().getState();
 
-    default:
-      return state;
+      default:
+        return state;
+    }
+  } catch (error: any) {
+    // Log error but don't crash the app
+    console.error('Game action error:', error);
+    // Return current state to prevent crashes
+    return state;
   }
 }
 

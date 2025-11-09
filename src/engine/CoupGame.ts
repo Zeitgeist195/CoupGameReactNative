@@ -1,7 +1,6 @@
 import {
   GameState,
   Player,
-  Card,
   CardType,
   ActionType,
   GamePhase,
@@ -157,10 +156,6 @@ export class CoupGame {
       // Challenger loses influence
       this.addLog(`${challenger.name} loses the challenge!`);
       this.loseInfluence(challengerId);
-      // If we're in card selection phase, wait for selection
-      if (this.state.gamePhase === GamePhase.CARD_LOSS_SELECTION) {
-        return this.getState();
-      }
       // Action proceeds
       if (rule.canBeBlocked) {
         this.state.gamePhase = GamePhase.WAITING_BLOCK;
@@ -171,10 +166,6 @@ export class CoupGame {
       // Action player loses influence
       this.addLog(`${actionPlayer.name} loses the challenge!`);
       this.loseInfluence(pendingAction.playerId);
-      // If we're in card selection phase, wait for selection
-      if (this.state.gamePhase === GamePhase.CARD_LOSS_SELECTION) {
-        return this.getState();
-      }
       // Action fails
       this.state.pendingAction = null;
       this.nextPlayer();
@@ -340,7 +331,7 @@ export class CoupGame {
 
     if (this.isGameOver()) {
       this.state.gamePhase = GamePhase.GAME_OVER;
-      this.state.winner = this.state.players.find((p) => p.isAlive);
+      this.state.winner = this.state.players.find((p) => p.isAlive) || null;
     } else {
       this.nextPlayer();
     }
@@ -421,7 +412,7 @@ export class CoupGame {
 
     if (this.isGameOver()) {
       this.state.gamePhase = GamePhase.GAME_OVER;
-      this.state.winner = this.state.players.find((p) => p.isAlive);
+      this.state.winner = this.state.players.find((p) => p.isAlive) || null;
     } else {
       // Only move to next player if action is complete
       if (!this.state.pendingAction) {

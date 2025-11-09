@@ -2,6 +2,8 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Modal, Card, Text, Button } from 'react-native-paper';
 import { Player, CardType } from '../types';
+import { getCardName, getCardColor } from '../utils/cardTranslations';
+import { COLORS } from '../constants/colors';
 
 interface CardSelectionModalProps {
   visible: boolean;
@@ -22,22 +24,6 @@ export default function CardSelectionModal({
     .map((card, index) => ({ card, index }))
     .filter(({ card }) => !card.revealed);
 
-  const getCardColor = (cardType: CardType): string => {
-    switch (cardType) {
-      case CardType.DUKE:
-        return '#4CAF50';
-      case CardType.CAPTAIN:
-        return '#2196F3';
-      case CardType.ASSASSIN:
-        return '#F44336';
-      case CardType.AMBASSADOR:
-        return '#FF9800';
-      case CardType.CONTESSA:
-        return '#9C27B0';
-      default:
-        return '#757575';
-    }
-  };
 
   return (
     <Modal
@@ -47,10 +33,10 @@ export default function CardSelectionModal({
       <Card style={styles.card}>
         <Card.Content>
           <Text variant="headlineSmall" style={styles.title}>
-            Select Card to Lose
+            Selecione uma Carta para Perder
           </Text>
           <Text variant="bodyMedium" style={styles.subtitle}>
-            {player.name}, choose which card to reveal:
+            {player.name}, escolha qual carta revelar:
           </Text>
 
           <View style={styles.cardsContainer}>
@@ -65,7 +51,7 @@ export default function CardSelectionModal({
                 ]}
                 contentStyle={styles.cardButtonContent}
               >
-                {card.type}
+                {getCardName(card.type)}
               </Button>
             ))}
           </View>
@@ -81,16 +67,18 @@ const styles = StyleSheet.create({
   },
   card: {
     elevation: 8,
+    backgroundColor: COLORS.cardBackground,
   },
   title: {
     textAlign: 'center',
     marginBottom: 8,
     fontWeight: 'bold',
+    color: COLORS.textPrimary,
   },
   subtitle: {
     textAlign: 'center',
     marginBottom: 24,
-    color: '#666',
+    color: COLORS.textSecondary,
   },
   cardsContainer: {
     gap: 12,

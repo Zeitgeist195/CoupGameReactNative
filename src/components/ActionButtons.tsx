@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Button, Menu, Portal, Dialog, Paragraph } from 'react-native-paper';
+import { Button, Menu, Portal, Dialog, Paragraph, Text } from 'react-native-paper';
 import { ActionType, Player } from '../types';
 import { ACTION_RULES } from '../constants/rules';
+import { COLORS } from '../constants/colors';
 
 interface ActionButtonsProps {
   currentPlayer: Player;
@@ -23,19 +24,19 @@ export default function ActionButtons({
   const getActionLabel = (action: ActionType): string => {
     switch (action) {
       case ActionType.INCOME:
-        return 'Income (+1 coin)';
+        return 'Renda (+1 moeda)';
       case ActionType.FOREIGN_AID:
-        return 'Foreign Aid (+2 coins)';
+        return 'Ajuda Externa (+2 moedas)';
       case ActionType.COUP:
-        return `Coup (7 coins)`;
+        return `Golpe (7 moedas)`;
       case ActionType.DUKE_TAX:
-        return 'Tax (+3 coins)';
+        return 'Taxar (+3 moedas)';
       case ActionType.CAPTAIN_STEAL:
-        return 'Steal (2 coins)';
+        return 'Roubar (2 moedas)';
       case ActionType.ASSASSIN_KILL:
-        return 'Assassinate (3 coins)';
+        return 'Assassinar (3 moedas)';
       case ActionType.AMBASSADOR_EXCHANGE:
-        return 'Exchange Cards';
+        return 'Trocar Cartas';
       default:
         return action;
     }
@@ -46,25 +47,25 @@ export default function ActionButtons({
     let desc = '';
     switch (action) {
       case ActionType.INCOME:
-        desc = 'Take 1 coin. Cannot be blocked or challenged.';
+        desc = 'Receba 1 moeda. Não pode ser bloqueado ou desafiado.';
         break;
       case ActionType.FOREIGN_AID:
-        desc = 'Take 2 coins. Can be blocked by Duke.';
+        desc = 'Receba 2 moedas. Pode ser bloqueado pelo Conde.';
         break;
       case ActionType.COUP:
-        desc = 'Pay 7 coins to eliminate a player. Cannot be blocked or challenged.';
+        desc = 'Pague 7 moedas para eliminar um jogador. Não pode ser bloqueado ou desafiado.';
         break;
       case ActionType.DUKE_TAX:
-        desc = 'Take 3 coins. Can be challenged.';
+        desc = 'Receba 3 moedas. Pode ser desafiado.';
         break;
       case ActionType.CAPTAIN_STEAL:
-        desc = 'Steal 2 coins from a player. Can be blocked or challenged.';
+        desc = 'Roube 2 moedas de outro jogador. Pode ser bloqueado ou desafiado.';
         break;
       case ActionType.ASSASSIN_KILL:
-        desc = 'Pay 3 coins to eliminate a player. Can be blocked or challenged.';
+        desc = 'Pague 3 moedas para eliminar um jogador. Pode ser bloqueado ou desafiado.';
         break;
       case ActionType.AMBASSADOR_EXCHANGE:
-        desc = 'Exchange cards with the deck. Can be challenged.';
+        desc = 'Troque cartas com o baralho. Pode ser desafiado.';
         break;
     }
     return desc;
@@ -160,7 +161,12 @@ export default function ActionButtons({
             </Paragraph>
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setInfoDialogVisible(false)}>Close</Button>
+            <Button 
+              onPress={() => setInfoDialogVisible(false)}
+              textColor={COLORS.buttonPrimary}
+            >
+              Fechar
+            </Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -176,6 +182,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
+    gap: 8,
   },
   actionItem: {
     width: '48%',
@@ -185,9 +192,10 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
+    borderRadius: 8,
   },
   actionButtonContent: {
-    paddingVertical: 4,
+    paddingVertical: 8,
   },
   infoButton: {
     marginLeft: 4,
