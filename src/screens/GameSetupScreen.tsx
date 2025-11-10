@@ -8,12 +8,14 @@ import {
   Animated,
 } from 'react-native';
 import { Button, TextInput, Text, Card as PaperCard } from 'react-native-paper';
+import { useTranslation } from 'react-i18next';
 import { useGame } from '../context/GameContext';
 import { COLORS } from '../constants/colors';
 import CardComponent from '../components/Card';
 import { CardType } from '../types';
 
 export default function GameSetupScreen({ navigation }: any) {
+  const { t } = useTranslation();
   const { dispatch } = useGame();
   const [playerNames, setPlayerNames] = useState<string[]>(['', '']);
   const [errors, setErrors] = useState<string[]>([]);
@@ -52,18 +54,18 @@ export default function GameSetupScreen({ navigation }: any) {
       .filter((name) => name.length > 0);
 
     if (validNames.length < 2) {
-      setErrors(['Pelo menos 2 jogadores são necessários']);
+      setErrors([t('errors.minPlayers', { defaultValue: 'Pelo menos 2 jogadores são necessários' })]);
       return;
     }
 
     if (validNames.length > 6) {
-      setErrors(['Máximo de 6 jogadores permitidos']);
+      setErrors([t('errors.maxPlayers', { defaultValue: 'Máximo de 6 jogadores permitidos' })]);
       return;
     }
 
     const uniqueNames = new Set(validNames);
     if (uniqueNames.size !== validNames.length) {
-      setErrors(['Os nomes dos jogadores devem ser únicos']);
+      setErrors([t('errors.uniqueNames', { defaultValue: 'Os nomes dos jogadores devem ser únicos' })]);
       return;
     }
 
@@ -104,14 +106,14 @@ export default function GameSetupScreen({ navigation }: any) {
               🎴 COUP
             </Text>
             <Text variant="bodyLarge" style={styles.subtitle}>
-              Adicione 2-6 jogadores para começar
+              {t('game.addPlayersToStart', { defaultValue: 'Adicione 2-6 jogadores para começar' })}
             </Text>
           </View>
 
           {/* Preview das Cartas */}
           <View style={styles.cardsPreview}>
             <Text variant="titleMedium" style={styles.previewTitle}>
-              Personagens do Jogo
+              {t('rules.characters_title')}
             </Text>
             <ScrollView 
               horizontal 
@@ -146,13 +148,13 @@ export default function GameSetupScreen({ navigation }: any) {
           <PaperCard style={styles.playersCard}>
             <PaperCard.Content>
               <Text variant="titleMedium" style={styles.sectionTitle}>
-                Jogadores
+                {t('game.players', { defaultValue: 'Jogadores' })}
               </Text>
               <View style={styles.playersContainer}>
                 {playerNames.map((name, index) => (
                   <View key={index} style={styles.playerRow}>
                     <TextInput
-                      label={`Jogador ${index + 1}`}
+                      label={`${t('game.player', { defaultValue: 'Jogador' })} ${index + 1}`}
                       value={name}
                       onChangeText={(text) => updatePlayerName(index, text)}
                       style={styles.input}
@@ -192,7 +194,7 @@ export default function GameSetupScreen({ navigation }: any) {
                     },
                   }}
                 >
-                  + Adicionar Jogador
+                  + {t('game.addPlayer')}
                 </Button>
               )}
             </PaperCard.Content>
@@ -211,7 +213,7 @@ export default function GameSetupScreen({ navigation }: any) {
               },
             }}
           >
-            🎮 Iniciar Jogo
+            🎮 {t('game.startGame')}
           </Button>
         </ScrollView>
       </Animated.View>

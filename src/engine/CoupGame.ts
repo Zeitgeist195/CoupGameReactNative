@@ -1,518 +1,868 @@
+// src/engine/CoupGame.ts
+// Main game engine with official Coup rules correctly implemented
+
 import {
-  GameState,
-  Player,
-  CardType,
+  Character,
   ActionType,
+  CounterActionType,
+  Player,
+  Action,
+  CounterAction,
+  Challenge,
+  GameState,
   GamePhase,
-  PendingAction,
+  GameLogEntry,
+  Card,
+  GAME_CONSTANTS,
+  ACTION_CONFIG
 } from '../types';
-import { ACTION_RULES, INITIAL_COINS, INITIAL_CARDS } from '../constants/rules';
-import { createDeck, shuffleDeck, drawCard } from '../utils/deck';
+import { uuidv4 } from '../utils/uuid';
 
 export class CoupGame {
   private state: GameState;
 
-  constructor(state?: GameState) {
-    this.state = state || this.createInitialState();
+  constructor(playerNames: string[]) {
+    if (playerNames.length < GAME_CONSTANTS.MIN_PLAYERS || 
+        playerNames.length > GAME_CONSTANTS.MAX_PLAYERS) {
+      throw new Error(`Game requires ${GAME_CONSTANTS.MIN_PLAYERS}-${GAME_CONSTANTS.MAX_PLAYERS} players`);
+    }
+
+    this.state = this.initializeGame(playerNames);
   }
 
-  private createInitialState(): GameState {
+  /**
+   * Initialize game state
+   */
+  private initializeGame(playerNames: string[]): GameState {
+    // Create deck with 3 copies of each character
+    const deck = this.createShuffledDeck();
+    
+    // Create players
+    const players: Player[] = playerNames.map((name, index) => {
+      const influences: Card[] = [
+        { character: deck.pop()!, isRevealed: false },
+        { character: deck.pop()!, isRevealed: false }
+      ];
+
+      // Special case for 2 players: first player gets 1 coin
+      const coins = (playerNames.length === 2 && index === 0) 
+        ? 1 
+        : GAME_CONSTANTS.STARTING_COINS;
+
+      return {
+        id: uuidv4(),
+        name,
+        coins,
+        influences,
+        isEliminated: false,
+        isAI: index > 0  // First player is human, rest are AI
+      };
+    });
+
     return {
-      players: [],
+      players,
       currentPlayerIndex: 0,
-      deck: [],
-      gamePhase: GamePhase.SETUP,
+      courtDeck: deck,
+      phase: {
+        type: 'action',
+        description: 'Choose an action'
+      },
       pendingAction: null,
-      winner: null,
-      gameLog: [],
+      gameLog: [{
+        id: uuidv4(),
+        timestamp: Date.now(),
+        type: 'action',
+        message: 'Game started!',
+        playerId: players[0].id,
+        translationKey: 'log.game_started'
+      }],
+      gameOver: false,
+      winnerId: null
     };
   }
 
-  getState(): GameState {
-    return { ...this.state };
-  }
-
-  // Initialization
-  initGame(playerNames: string[]): GameState {
-    if (playerNames.length < 2 || playerNames.length > 6) {
-      throw new Error('Game requires 2-6 players');
-    }
-
-    const players: Player[] = playerNames.map((name, index) => ({
-      id: `player-${index}`,
-      name,
-      coins: INITIAL_COINS,
-      cards: [],
-      isAlive: true,
-      isCurrentPlayer: index === 0,
-    }));
-
-    let deck = shuffleDeck(createDeck());
-
-    // Deal 2 cards to each player
-    players.forEach((player) => {
-      for (let i = 0; i < INITIAL_CARDS; i++) {
-        const { card, newDeck } = drawCard(deck);
-        player.cards.push({
-          type: card,
-          revealed: false,
-        });
-        deck = newDeck;
+  /**
+   * Create and shuffle deck
+   */
+  private createShuffledDeck(): Character[] {
+    const deck: Character[] = [];
+    
+    // Add 3 copies of each character
+    Object.values(Character).forEach(character => {
+      for (let i = 0; i < GAME_CONSTANTS.CARDS_PER_CHARACTER; i++) {
+        deck.push(character);
       }
     });
 
-    this.state = {
-      players,
-      currentPlayerIndex: 0,
-      deck,
-      gamePhase: GamePhase.ACTION_SELECTION,
-      pendingAction: null,
-      winner: null,
-      gameLog: [`Game started with ${playerNames.length} players`],
-    };
+    // Shuffle using Fisher-Yates algorithm
+    for (let i = deck.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
 
-    return this.getState();
+    return deck;
   }
 
-  // Actions
-  executeAction(actionType: ActionType, targetPlayerId?: string): GameState {
-    const currentPlayer = this.getCurrentPlayer();
-    if (!currentPlayer) {
-      throw new Error('No current player');
+  /**
+   * Get current game state
+   */
+  public getState(): GameState {
+    return { ...this.state };
+  }
+
+  /**
+   * Get current player
+   */
+  public getCurrentPlayer(): Player {
+    return this.state.players[this.state.currentPlayerIndex];
+  }
+
+  /**
+   * Perform an action
+   */
+  public performAction(action: Action): void {
+    const actor = this.getPlayerById(action.actorId);
+    
+    if (!actor || actor.isEliminated) {
+      throw new Error('Invalid actor');
     }
 
-    const rule = ACTION_RULES[actionType];
-    if (!this.canPerformAction(currentPlayer.id, actionType)) {
-      throw new Error(`Cannot perform action: ${actionType}`);
+    if (actor.id !== this.getCurrentPlayer().id) {
+      throw new Error('Not your turn');
     }
 
-    // Check if action requires target
-    if (rule.requiresTarget && !targetPlayerId) {
-      throw new Error(`Action ${actionType} requires a target`);
+    // Validate action
+    this.validateAction(action, actor);
+
+    // Check if must Coup (10+ coins)
+    if (actor.coins >= GAME_CONSTANTS.MANDATORY_COUP_THRESHOLD && 
+        action.type !== ActionType.COUP) {
+      throw new Error('Must Coup with 10+ coins');
     }
 
-    // Check if player has enough coins
-    if (currentPlayer.coins < rule.cost) {
-      throw new Error(`Not enough coins. Need ${rule.cost}, have ${currentPlayer.coins}`);
-    }
-
-    // Deduct cost immediately for COUP and ASSASSIN_KILL
-    if (actionType === ActionType.COUP || actionType === ActionType.ASSASSIN_KILL) {
-      currentPlayer.coins -= rule.cost;
-    }
-
-    // Create pending action
-    const pendingAction: PendingAction = {
-      type: actionType,
-      playerId: currentPlayer.id,
-      targetPlayerId,
-      canBeBlocked: rule.canBeBlocked,
-      canBeChallenged: rule.canBeChallenged,
-      blockingCards: rule.blockingCards,
+    // Set pending action
+    this.state.pendingAction = {
+      action,
+      awaitingResponse: true
     };
 
-    this.state.pendingAction = pendingAction;
-    this.addLog(`${currentPlayer.name} performs ${actionType}${targetPlayerId ? ` on ${this.getPlayer(targetPlayerId)?.name}` : ''}`);
+    // Pay costs immediately
+    const config = ACTION_CONFIG[action.type];
+    if (config.cost > 0) {
+      actor.coins -= config.cost;
+      this.addLog({
+        type: 'action',
+        message: `Paid ${config.cost} coins`,
+        playerId: actor.id,
+        translationKey: 'log.coins_paid',
+        translationParams: { 
+          playerName: actor.name, 
+          coins: config.cost 
+        }
+      });
+    }
 
-    // If action can be challenged, go to challenge phase
-    if (rule.canBeChallenged) {
-      this.state.gamePhase = GamePhase.WAITING_CHALLENGE;
-    } else if (rule.canBeBlocked) {
-      // If can't be challenged but can be blocked, go to block phase
-      this.state.gamePhase = GamePhase.WAITING_BLOCK;
+    // Log action
+    if (action.targetId) {
+      const target = this.getPlayerById(action.targetId);
+      this.addLog({
+        type: 'action',
+        message: `${actor.name} uses ${action.type} on ${target?.name}`,
+        playerId: actor.id,
+        translationKey: 'log.action_targeted',
+        translationParams: {
+          playerName: actor.name,
+          action: action.type,
+          targetName: target?.name
+        }
+      });
     } else {
-      // Otherwise, resolve immediately
+      this.addLog({
+        type: 'action',
+        message: `${actor.name} takes ${action.type}`,
+        playerId: actor.id,
+        translationKey: 'log.action_taken',
+        translationParams: {
+          playerName: actor.name,
+          action: action.type
+        }
+      });
+    }
+
+    // Determine next phase
+    if (config.canBeChallenged) {
+      this.state.phase = {
+        type: 'challenge',
+        description: 'Other players can challenge'
+      };
+    } else if (config.canBeBlocked) {
+      this.state.phase = {
+        type: 'counteraction',
+        description: 'Target can block'
+      };
+    } else {
+      // Cannot be challenged or blocked - execute immediately
       this.resolveAction();
     }
-
-    return this.getState();
   }
 
-  // Challenges
-  challengeAction(challengerId: string): GameState {
-    if (this.state.gamePhase !== GamePhase.WAITING_CHALLENGE) {
-      throw new Error('Not in challenge phase');
+  /**
+   * Issue a challenge
+   */
+  public challenge(challengerId: string, isForAction: boolean = true): void {
+    if (!this.state.pendingAction) {
+      throw new Error('No pending action to challenge');
     }
 
-    const pendingAction = this.state.pendingAction;
-    if (!pendingAction) {
-      throw new Error('No pending action');
+    const challenger = this.getPlayerById(challengerId);
+    if (!challenger || challenger.isEliminated) {
+      throw new Error('Invalid challenger');
     }
 
-    const challenger = this.getPlayer(challengerId);
-    const actionPlayer = this.getPlayer(pendingAction.playerId);
-    if (!challenger || !actionPlayer) {
-      throw new Error('Player not found');
+    const targetId = isForAction 
+      ? this.state.pendingAction.action.actorId
+      : this.state.pendingAction.counterAction!.actorId;
+
+    const target = this.getPlayerById(targetId);
+    if (!target) {
+      throw new Error('Invalid target');
     }
 
-    const rule = ACTION_RULES[pendingAction.type];
-    const hasCard = actionPlayer.cards.some(
-      (card) => !card.revealed && card.type === rule.requiredCard
+    this.addLog({
+      type: 'challenge',
+      message: `${challenger.name} challenges ${target.name}`,
+      playerId: challenger.id,
+      translationKey: 'log.challenge_issued',
+      translationParams: {
+        challengerName: challenger.name,
+        targetName: target.name
+      }
+    });
+
+    // Determine which character is being challenged
+    const claimedCharacter = isForAction
+      ? this.state.pendingAction.action.claimedCharacter
+      : this.state.pendingAction.counterAction!.claimedCharacter;
+
+    if (!claimedCharacter) {
+      throw new Error('No character to challenge');
+    }
+
+    // Check if target has the card
+    const hasCard = target.influences.some(
+      card => !card.isRevealed && card.character === claimedCharacter
     );
 
-    this.addLog(`${challenger.name} challenges ${actionPlayer.name}'s ${pendingAction.type}`);
-
     if (hasCard) {
-      // Challenger loses influence
-      this.addLog(`${challenger.name} loses the challenge!`);
-      this.loseInfluence(challengerId);
-      // Action proceeds
-      if (rule.canBeBlocked) {
-        this.state.gamePhase = GamePhase.WAITING_BLOCK;
+      // CHALLENGE FAILED - Challenger loses influence
+      this.handleFailedChallenge(challenger, target, claimedCharacter, isForAction);
+    } else {
+      // CHALLENGE SUCCEEDED - Target loses influence, action fails
+      this.handleSuccessfulChallenge(challenger, target, claimedCharacter, isForAction);
+    }
+  }
+
+  /**
+   * Handle failed challenge (defender has the card)
+   * OFFICIAL RULE:
+   * 1. Defender reveals the character card to all players (automatic)
+   * 2. Revealed card is shuffled back into Court Deck
+   * 3. Defender draws a new card from Court Deck
+   * 4. Challenger loses 1 influence (penalty for wrong challenge)
+   * 5. Original action succeeds as planned
+   */
+  private handleFailedChallenge(
+    challenger: Player,
+    defender: Player,
+    claimedCharacter: Character,
+    isForAction: boolean
+  ): void {
+    this.addLog({
+      type: 'challenge',
+      message: `Challenge failed! ${defender.name} had ${claimedCharacter}`,
+      playerId: challenger.id,
+      translationKey: 'log.challenge_failed',
+      translationParams: {
+        challengerName: challenger.name,
+        targetName: defender.name,
+        character: claimedCharacter
+      }
+    });
+
+    // 1. Defender reveals the claimed character card automatically
+    const defenderCard = defender.influences.find(
+      c => !c.isRevealed && c.character === claimedCharacter
+    );
+    
+    if (!defenderCard) {
+      throw new Error('Defender should have the claimed card');
+    }
+
+    // Reveal the card
+    defenderCard.isRevealed = true;
+
+    this.addLog({
+      type: 'resolution',
+      message: `${defender.name} reveals ${claimedCharacter}`,
+      playerId: defender.id,
+      translationKey: 'log.card_revealed',
+      translationParams: {
+        playerName: defender.name,
+        character: claimedCharacter
+      }
+    });
+
+    // 2. Return revealed card to deck and draw new one
+    this.returnCardAndDrawNew(defender, defenderCard);
+
+    // 3. Challenger loses 1 influence (must choose which card)
+    this.state.phase = {
+      type: 'card_selection',
+      description: `${challenger.name} must lose an influence`
+    };
+    
+    // Store who needs to lose influence
+    this.state.pendingAction!.challenge = {
+      challengerId: challenger.id,
+      targetId: defender.id,
+      isForAction
+    };
+
+    // After challenger loses influence, original action will continue in loseInfluence()
+  }
+
+  /**
+   * Handle successful challenge (defender doesn't have the card)
+   */
+  private handleSuccessfulChallenge(
+    challenger: Player,
+    defender: Player,
+    claimedCharacter: Character,
+    isForAction: boolean
+  ): void {
+    this.addLog({
+      type: 'challenge',
+      message: `Challenge succeeded! ${defender.name} didn't have ${claimedCharacter}`,
+      playerId: challenger.id,
+      translationKey: 'log.challenge_success',
+      translationParams: {
+        challengerName: challenger.name,
+        targetName: defender.name,
+        character: claimedCharacter
+      }
+    });
+
+    // Defender loses 1 influence
+    this.state.phase = {
+      type: 'card_selection',
+      description: `${defender.name} must lose an influence`
+    };
+
+    // ACTION FAILS - will not be executed
+    this.state.pendingAction!.challenge = {
+      challengerId: challenger.id,
+      targetId: defender.id,
+      isForAction
+    };
+  }
+
+  /**
+   * Player loses an influence (selects which card to reveal)
+   */
+  public loseInfluence(playerId: string, cardIndex: number): void {
+    const player = this.getPlayerById(playerId);
+    if (!player) {
+      throw new Error('Invalid player');
+    }
+
+    if (cardIndex < 0 || cardIndex >= player.influences.length) {
+      throw new Error('Invalid card index');
+    }
+
+    const card = player.influences[cardIndex];
+    if (card.isRevealed) {
+      throw new Error('Card already revealed');
+    }
+
+    // Reveal the card
+    card.isRevealed = true;
+
+    this.addLog({
+      type: 'resolution',
+      message: `${player.name} loses influence: ${card.character}`,
+      playerId: player.id,
+      translationKey: 'log.influence_lost',
+      translationParams: {
+        playerName: player.name,
+        character: card.character
+      }
+    });
+
+    // Check if player is eliminated
+    const allRevealed = player.influences.every(c => c.isRevealed);
+    if (allRevealed) {
+      player.isEliminated = true;
+      this.addLog({
+        type: 'elimination',
+        message: `${player.name} has been eliminated!`,
+        playerId: player.id,
+        translationKey: 'log.player_eliminated',
+        translationParams: { playerName: player.name }
+      });
+
+      // Check for game over
+      this.checkGameOver();
+    }
+
+    // Handle post-influence-loss logic
+    if (this.state.pendingAction?.challenge) {
+      const challenge = this.state.pendingAction.challenge;
+      
+      if (playerId === challenge.challengerId) {
+        // Challenger lost influence (failed challenge)
+        if (challenge.isForAction) {
+          // Failed challenge to action: defender already revealed card and drew new one
+          // Now continue with original action resolution
+          this.resolveAction();
+        } else {
+          // Failed challenge to counteraction: counteraction succeeds, action is blocked
+          this.state.pendingAction = null;
+          this.nextTurn();
+        }
+      } else if (playerId === challenge.targetId) {
+        // Defender lost influence (successful challenge)
+        if (challenge.isForAction) {
+          // Successful challenge to action: action FAILS
+          // Coins paid are NOT refunded (already paid in performAction)
+          this.state.pendingAction = null;
+          this.nextTurn();
+        } else {
+          // Successful challenge to counteraction: counteraction fails, action SUCCEEDS
+          // Remove the counteraction so action can proceed
+          this.state.pendingAction.counterAction = undefined;
+          this.resolveAction();
+        }
+      }
+    } else {
+      // Normal influence loss from assassination or coup
+      this.resolveAction();
+    }
+  }
+
+  /**
+   * Return card to deck and draw new one
+   */
+  private returnCardAndDrawNew(player: Player, card: Card): void {
+    // Add card back to deck
+    this.state.courtDeck.push(card.character);
+    
+    // Shuffle deck
+    this.shuffleDeck();
+    
+    // Draw new card
+    if (this.state.courtDeck.length > 0) {
+      card.character = this.state.courtDeck.pop()!;
+      card.isRevealed = false;
+    }
+  }
+
+  /**
+   * Shuffle the court deck
+   */
+  private shuffleDeck(): void {
+    const deck = this.state.courtDeck;
+    for (let i = deck.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+  }
+
+  /**
+   * Counteraction
+   */
+  public counteract(counterAction: CounterAction): void {
+    if (!this.state.pendingAction) {
+      throw new Error('No action to counteract');
+    }
+
+    const actor = this.getPlayerById(counterAction.actorId);
+    if (!actor || actor.isEliminated) {
+      throw new Error('Invalid actor');
+    }
+
+    // Validate counteraction
+    this.validateCounterAction(counterAction);
+
+    this.state.pendingAction.counterAction = counterAction;
+
+    this.addLog({
+      type: 'counteraction',
+      message: `${actor.name} blocks with ${counterAction.claimedCharacter}`,
+      playerId: actor.id,
+      translationKey: 'log.counteraction',
+      translationParams: {
+        playerName: actor.name,
+        character: counterAction.claimedCharacter
+      }
+    });
+
+    // Move to challenge phase for counteraction
+    this.state.phase = {
+      type: 'challenge_counteraction',
+      description: 'Can challenge the block'
+    };
+  }
+
+  /**
+   * Allow action (don't challenge or counteract)
+   */
+  public allowAction(): void {
+    if (this.state.phase.type === 'challenge') {
+      // No one challenged - move to counteraction or resolution
+      const config = ACTION_CONFIG[this.state.pendingAction!.action.type];
+      if (config.canBeBlocked) {
+        this.state.phase = {
+          type: 'counteraction',
+          description: 'Target can block'
+        };
       } else {
         this.resolveAction();
       }
-    } else {
-      // Action player loses influence
-      this.addLog(`${actionPlayer.name} loses the challenge!`);
-      this.loseInfluence(pendingAction.playerId);
-      // Action fails
-      this.state.pendingAction = null;
-      this.nextPlayer();
-    }
-
-    return this.getState();
-  }
-
-  // Blocks
-  blockAction(blockerId: string, blockingCard: CardType): GameState {
-    if (this.state.gamePhase !== GamePhase.WAITING_BLOCK) {
-      throw new Error('Not in block phase');
-    }
-
-    const pendingAction = this.state.pendingAction;
-    if (!pendingAction) {
-      throw new Error('No pending action');
-    }
-
-    const blocker = this.getPlayer(blockerId);
-    if (!blocker) {
-      throw new Error('Player not found');
-    }
-
-    const rule = ACTION_RULES[pendingAction.type];
-    if (!rule.blockingCards?.includes(blockingCard)) {
-      throw new Error(`Invalid blocking card for ${pendingAction.type}`);
-    }
-
-    this.addLog(`${blocker.name} blocks ${pendingAction.type} with ${blockingCard}`);
-
-    // Block can be challenged
-    this.state.gamePhase = GamePhase.WAITING_CHALLENGE;
-    // Update pending action to reflect block
-    this.state.pendingAction = {
-      ...pendingAction,
-      playerId: blockerId, // Now challenging the blocker
-    };
-
-    return this.getState();
-  }
-
-  // Skip challenge/block
-  skipChallenge(): GameState {
-    if (this.state.gamePhase !== GamePhase.WAITING_CHALLENGE) {
-      throw new Error('Not in challenge phase');
-    }
-
-    const pendingAction = this.state.pendingAction;
-    if (!pendingAction) {
-      throw new Error('No pending action');
-    }
-
-    this.addLog('No challenge made');
-
-    if (ACTION_RULES[pendingAction.type].canBeBlocked) {
-      this.state.gamePhase = GamePhase.WAITING_BLOCK;
-    } else {
+    } else if (this.state.phase.type === 'counteraction') {
+      // No one blocked - resolve action
       this.resolveAction();
+    } else if (this.state.phase.type === 'challenge_counteraction') {
+      // No one challenged the block - action is blocked
+      this.state.pendingAction = null;
+      this.nextTurn();
     }
-
-    return this.getState();
   }
 
-  skipBlock(): GameState {
-    if (this.state.gamePhase !== GamePhase.WAITING_BLOCK) {
-      throw new Error('Not in block phase');
-    }
-
-    this.addLog('No block made');
-    this.resolveAction();
-
-    return this.getState();
-  }
-
-  // Resolution
+  /**
+   * Resolve the pending action
+   */
   private resolveAction(): void {
-    const pendingAction = this.state.pendingAction;
-    if (!pendingAction) {
+    if (!this.state.pendingAction) {
       return;
     }
 
-    const actionPlayer = this.getPlayer(pendingAction.playerId);
-    if (!actionPlayer) {
+    const action = this.state.pendingAction.action;
+    const actor = this.getPlayerById(action.actorId);
+    
+    if (!actor) {
       return;
     }
 
-    const rule = ACTION_RULES[pendingAction.type];
+    // Check if action was blocked
+    if (this.state.pendingAction.counterAction) {
+      this.addLog({
+        type: 'resolution',
+        message: 'Action was blocked',
+        playerId: actor.id,
+        translationKey: 'log.action_blocked'
+      });
+      this.state.pendingAction = null;
+      this.nextTurn();
+      return;
+    }
 
-    switch (pendingAction.type) {
+    // Execute action based on type
+    switch (action.type) {
       case ActionType.INCOME:
-        actionPlayer.coins += 1;
-        this.addLog(`${actionPlayer.name} gains 1 coin`);
+        this.executeIncome(actor);
         break;
-
       case ActionType.FOREIGN_AID:
-        actionPlayer.coins += 2;
-        this.addLog(`${actionPlayer.name} gains 2 coins`);
+        this.executeForeignAid(actor);
         break;
-
       case ActionType.COUP:
-        if (pendingAction.targetPlayerId) {
-          this.loseInfluence(pendingAction.targetPlayerId);
-          // If we're in card selection phase, wait for selection
-          if (this.state.gamePhase === GamePhase.CARD_LOSS_SELECTION) {
-            return;
-          }
-        }
+        this.executeCoup(actor, action.targetId!);
+        return; // Don't advance turn yet - target must choose card
+      case ActionType.TAX:
+        this.executeTax(actor);
         break;
-
-      case ActionType.DUKE_TAX:
-        actionPlayer.coins += 3;
-        this.addLog(`${actionPlayer.name} gains 3 coins`);
+      case ActionType.ASSASSINATE:
+        this.executeAssassinate(actor, action.targetId!);
+        return; // Don't advance turn yet - target must choose card
+      case ActionType.STEAL:
+        this.executeSteal(actor, action.targetId!);
         break;
-
-      case ActionType.CAPTAIN_STEAL:
-        if (pendingAction.targetPlayerId) {
-          const target = this.getPlayer(pendingAction.targetPlayerId);
-          if (target) {
-            const stealAmount = Math.min(2, target.coins);
-            target.coins -= stealAmount;
-            actionPlayer.coins += stealAmount;
-            this.addLog(`${actionPlayer.name} steals ${stealAmount} coins from ${target.name}`);
-          }
-        }
-        break;
-
-      case ActionType.ASSASSIN_KILL:
-        if (pendingAction.targetPlayerId) {
-          this.loseInfluence(pendingAction.targetPlayerId);
-          // If we're in card selection phase, wait for selection
-          if (this.state.gamePhase === GamePhase.CARD_LOSS_SELECTION) {
-            return;
-          }
-        }
-        break;
-
-      case ActionType.AMBASSADOR_EXCHANGE:
-        // Exchange cards (simplified - draw 2, return 2)
-        const { card: card1, newDeck: deck1 } = drawCard(this.state.deck);
-        const { card: card2, newDeck: deck2 } = drawCard(deck1);
-        this.state.deck = deck2;
-
-        // Return 2 cards to deck and give 2 new ones
-        const cardsToReturn = actionPlayer.cards.filter((c) => !c.revealed).slice(0, 2);
-        cardsToReturn.forEach((card) => {
-          this.state.deck.push(card.type);
-        });
-        this.state.deck = shuffleDeck(this.state.deck);
-
-        // Replace cards
-        actionPlayer.cards = actionPlayer.cards.filter((c) => c.revealed);
-        actionPlayer.cards.push(
-          { type: card1, revealed: false },
-          { type: card2, revealed: false }
-        );
-        this.addLog(`${actionPlayer.name} exchanges cards`);
-        break;
+      case ActionType.EXCHANGE:
+        this.executeExchange(actor);
+        return; // Special handling for exchange
     }
 
     this.state.pendingAction = null;
-    this.state.gamePhase = GamePhase.ACTION_SELECTION;
-
-    if (this.isGameOver()) {
-      this.state.gamePhase = GamePhase.GAME_OVER;
-      this.state.winner = this.state.players.find((p) => p.isAlive) || null;
-    } else {
-      this.nextPlayer();
-    }
+    this.nextTurn();
   }
 
-  loseInfluence(playerId: string, cardIndex?: number): void {
-    const player = this.getPlayer(playerId);
-    if (!player) {
-      throw new Error('Player not found');
-    }
+  /**
+   * Execute Income action
+   */
+  private executeIncome(actor: Player): void {
+    actor.coins += 1;
+    this.addLog({
+      type: 'resolution',
+      message: `${actor.name} gains 1 coin`,
+      playerId: actor.id,
+      translationKey: 'log.coins_gained',
+      translationParams: { playerName: actor.name, coins: 1 }
+    });
+  }
 
-    const aliveCards = player.cards.filter((c) => !c.revealed);
-    if (aliveCards.length === 0) {
-      player.isAlive = false;
-      this.addLog(`${player.name} is eliminated!`);
+  /**
+   * Execute Foreign Aid action
+   */
+  private executeForeignAid(actor: Player): void {
+    actor.coins += 2;
+    this.addLog({
+      type: 'resolution',
+      message: `${actor.name} gains 2 coins`,
+      playerId: actor.id,
+      translationKey: 'log.coins_gained',
+      translationParams: { playerName: actor.name, coins: 2 }
+    });
+  }
+
+  /**
+   * Execute Coup action
+   */
+  private executeCoup(actor: Player, targetId: string): void {
+    // Target must lose an influence
+    this.state.phase = {
+      type: 'card_selection',
+      description: 'Target must lose an influence'
+    };
+  }
+
+  /**
+   * Execute Tax action
+   */
+  private executeTax(actor: Player): void {
+    actor.coins += 3;
+    this.addLog({
+      type: 'resolution',
+      message: `${actor.name} gains 3 coins`,
+      playerId: actor.id,
+      translationKey: 'log.coins_gained',
+      translationParams: { playerName: actor.name, coins: 3 }
+    });
+  }
+
+  /**
+   * Execute Assassinate action
+   */
+  private executeAssassinate(actor: Player, targetId: string): void {
+    // Target must lose an influence
+    this.state.phase = {
+      type: 'card_selection',
+      description: 'Target must lose an influence'
+    };
+  }
+
+  /**
+   * Execute Steal action
+   */
+  private executeSteal(actor: Player, targetId: string): void {
+    const target = this.getPlayerById(targetId);
+    if (!target) {
       return;
     }
 
-    // If cardIndex provided, reveal that card
-    if (cardIndex !== undefined && cardIndex < player.cards.length) {
-      player.cards[cardIndex].revealed = true;
-      this.addLog(`${player.name} loses ${player.cards[cardIndex].type}`);
-    } else {
-      // If player has multiple cards, they need to choose
-      if (aliveCards.length > 1) {
-        this.state.gamePhase = GamePhase.CARD_LOSS_SELECTION;
-        return;
-      }
-      // Otherwise, reveal first alive card
-      const firstAliveIndex = player.cards.findIndex((c) => !c.revealed);
-      if (firstAliveIndex !== -1) {
-        player.cards[firstAliveIndex].revealed = true;
-        this.addLog(`${player.name} loses ${player.cards[firstAliveIndex].type}`);
-      }
-    }
+    const stolenCoins = Math.min(2, target.coins);
+    target.coins -= stolenCoins;
+    actor.coins += stolenCoins;
 
-    // Check if player is eliminated
-    const remainingCards = player.cards.filter((c) => !c.revealed);
-    if (remainingCards.length === 0) {
-      player.isAlive = false;
-      this.addLog(`${player.name} is eliminated!`);
-    }
+    this.addLog({
+      type: 'resolution',
+      message: `${actor.name} steals ${stolenCoins} coins from ${target.name}`,
+      playerId: actor.id,
+      translationKey: 'log.coins_stolen',
+      translationParams: {
+        playerName: actor.name,
+        coins: stolenCoins,
+        targetName: target.name
+      }
+    });
   }
 
-  selectCardToLose(playerId: string, cardIndex: number): GameState {
-    if (this.state.gamePhase !== GamePhase.CARD_LOSS_SELECTION) {
-      throw new Error('Not in card loss selection phase');
-    }
-
-    // Reveal the selected card
-    const player = this.getPlayer(playerId);
-    if (player && cardIndex < player.cards.length) {
-      player.cards[cardIndex].revealed = true;
-      this.addLog(`${player.name} loses ${player.cards[cardIndex].type}`);
-    }
-
-    // Check if player is eliminated
-    if (player) {
-      const remainingCards = player.cards.filter((c) => !c.revealed);
-      if (remainingCards.length === 0) {
-        player.isAlive = false;
-        this.addLog(`${player.name} is eliminated!`);
+  /**
+   * Execute Exchange action (Ambassador)
+   * OFFICIAL RULE: Draw 2 cards, have 4 total, choose 2 to keep, return 2 to deck
+   */
+  private executeExchange(actor: Player): void {
+    // Draw 2 cards from deck
+    const drawnCards: Character[] = [];
+    for (let i = 0; i < GAME_CONSTANTS.AMBASSADOR_DRAW_COUNT; i++) {
+      if (this.state.courtDeck.length > 0) {
+        drawnCards.push(this.state.courtDeck.pop()!);
       }
     }
 
-    this.state.gamePhase = GamePhase.ACTION_SELECTION;
+    // Create array with all 4 cards (2 original unrevealed + 2 drawn)
+    const allCards: Card[] = [
+      ...actor.influences.filter(c => !c.isRevealed),  // Original 2 cards
+      ...drawnCards.map(char => ({ character: char, isRevealed: false }))  // 2 drawn cards
+    ];
 
-    // If there was a pending action, continue resolving it
+    // Store in pendingAction for UI to access
     if (this.state.pendingAction) {
-      const rule = ACTION_RULES[this.state.pendingAction.type];
-      // If action was COUP or ASSASSIN_KILL, it's already resolved
-      // Otherwise, continue with the action flow
-      if (this.state.pendingAction.type === ActionType.COUP || 
-          this.state.pendingAction.type === ActionType.ASSASSIN_KILL) {
-        this.state.pendingAction = null;
+      this.state.pendingAction.ambassadorDrawnCards = drawnCards;
+      this.state.pendingAction.ambassadorAllCards = allCards;
+    }
+    
+    this.addLog({
+      type: 'resolution',
+      message: `${actor.name} exchanges cards with the deck`,
+      playerId: actor.id,
+      translationKey: 'log.ambassador_exchange',
+      translationParams: { playerName: actor.name }
+    });
+
+    // Phase will be 'card_selection' for choosing cards
+    this.state.phase = {
+      type: 'card_selection',
+      description: 'Choose 2 cards to keep from 4 available'
+    };
+  }
+
+  /**
+   * Complete Ambassador Exchange - player chooses 2 of 4 cards to keep
+   * @param playerId - ID of player doing exchange
+   * @param cardIndices - Indices (0-3) of the 2 cards to keep from the 4 available
+   */
+  public completeExchange(playerId: string, cardIndices: number[]): void {
+    if (!this.state.pendingAction || 
+        this.state.pendingAction.action.type !== ActionType.EXCHANGE ||
+        !this.state.pendingAction.ambassadorAllCards) {
+      throw new Error('No pending exchange action');
+    }
+
+    if (cardIndices.length !== 2) {
+      throw new Error('Must select exactly 2 cards');
+    }
+
+    const actor = this.getPlayerById(playerId);
+    if (!actor || actor.id !== this.state.pendingAction.action.actorId) {
+      throw new Error('Invalid player');
+    }
+
+    const allCards = this.state.pendingAction.ambassadorAllCards;
+    const cardsToKeep = cardIndices.map(idx => allCards[idx]);
+    const cardsToReturn = allCards.filter((_, idx) => !cardIndices.includes(idx));
+
+    // Update player's influences to the 2 chosen cards
+    actor.influences = cardsToKeep.map(card => ({ ...card, isRevealed: false }));
+
+    // Return the other 2 cards to deck
+    cardsToReturn.forEach(card => {
+      this.state.courtDeck.push(card.character);
+    });
+
+    // Shuffle deck
+    this.shuffleDeck();
+
+    this.addLog({
+      type: 'resolution',
+      message: `${actor.name} completed exchange`,
+      playerId: actor.id,
+      translationKey: 'log.exchange_completed',
+      translationParams: { playerName: actor.name }
+    });
+
+    // Clear pending action and move to next turn
+    this.state.pendingAction = null;
+    this.nextTurn();
+  }
+
+  /**
+   * Validate action
+   */
+  private validateAction(action: Action, actor: Player): void {
+    const config = ACTION_CONFIG[action.type];
+
+    // Check coins
+    if (config.cost > actor.coins) {
+      throw new Error('Not enough coins');
+    }
+
+    // Check target
+    if (config.requiresTarget && !action.targetId) {
+      throw new Error('Action requires a target');
+    }
+
+    if (action.targetId) {
+      const target = this.getPlayerById(action.targetId);
+      if (!target || target.isEliminated || target.id === actor.id) {
+        throw new Error('Invalid target');
       }
     }
-
-    if (this.isGameOver()) {
-      this.state.gamePhase = GamePhase.GAME_OVER;
-      this.state.winner = this.state.players.find((p) => p.isAlive) || null;
-    } else {
-      // Only move to next player if action is complete
-      if (!this.state.pendingAction) {
-        this.nextPlayer();
-      }
-    }
-
-    return this.getState();
   }
 
-  // Validations
-  canPerformAction(playerId: string, actionType: ActionType): boolean {
-    const player = this.getPlayer(playerId);
-    if (!player || !player.isAlive) {
-      return false;
-    }
-
-    if (player.id !== this.getCurrentPlayer()?.id) {
-      return false;
-    }
-
-    if (this.state.gamePhase !== GamePhase.ACTION_SELECTION) {
-      return false;
-    }
-
-    const rule = ACTION_RULES[actionType];
-    return player.coins >= rule.cost;
+  /**
+   * Validate counteraction
+   */
+  private validateCounterAction(counterAction: CounterAction): void {
+    // TODO: Implement validation
   }
 
-  canBlock(playerId: string, actionType: ActionType): boolean {
-    const player = this.getPlayer(playerId);
-    if (!player || !player.isAlive) {
-      return false;
-    }
+  /**
+   * Move to next turn
+   */
+  private nextTurn(): void {
+    do {
+      this.state.currentPlayerIndex = 
+        (this.state.currentPlayerIndex + 1) % this.state.players.length;
+    } while (this.getCurrentPlayer().isEliminated);
 
-    const rule = ACTION_RULES[actionType];
-    if (!rule.canBeBlocked) {
-      return false;
-    }
+    this.state.phase = {
+      type: 'action',
+      description: 'Choose an action'
+    };
 
-    // Check if player has a blocking card
-    return player.cards.some(
-      (card) => !card.revealed && rule.blockingCards?.includes(card.type)
-    );
+    this.addLog({
+      type: 'action',
+      message: `${this.getCurrentPlayer().name}'s turn`,
+      playerId: this.getCurrentPlayer().id,
+      translationKey: 'log.player_turn',
+      translationParams: { playerName: this.getCurrentPlayer().name }
+    });
   }
 
-  isGameOver(): boolean {
-    const alivePlayers = this.state.players.filter((p) => p.isAlive);
-    return alivePlayers.length <= 1;
+  /**
+   * Check if game is over
+   */
+  private checkGameOver(): void {
+    const remainingPlayers = this.state.players.filter(p => !p.isEliminated);
+    
+    if (remainingPlayers.length === 1) {
+      this.state.gameOver = true;
+      this.state.winnerId = remainingPlayers[0].id;
+      
+      this.addLog({
+        type: 'resolution',
+        message: `${remainingPlayers[0].name} wins!`,
+        playerId: remainingPlayers[0].id,
+        translationKey: 'log.game_won',
+        translationParams: { playerName: remainingPlayers[0].name }
+      });
+    }
   }
 
-  // Helpers
-  nextPlayer(): void {
-    const currentPlayer = this.getCurrentPlayer();
-    if (currentPlayer) {
-      currentPlayer.isCurrentPlayer = false;
-    }
-
-    // Find next alive player
-    let nextIndex = (this.state.currentPlayerIndex + 1) % this.state.players.length;
-    let attempts = 0;
-    while (!this.state.players[nextIndex].isAlive && attempts < this.state.players.length) {
-      nextIndex = (nextIndex + 1) % this.state.players.length;
-      attempts++;
-    }
-
-    this.state.currentPlayerIndex = nextIndex;
-    const nextPlayer = this.state.players[nextIndex];
-    if (nextPlayer) {
-      nextPlayer.isCurrentPlayer = true;
-    }
-
-    this.state.gamePhase = GamePhase.ACTION_SELECTION;
+  /**
+   * Get player by ID
+   */
+  private getPlayerById(id: string): Player | undefined {
+    return this.state.players.find(p => p.id === id);
   }
 
-  getAvailableActions(playerId: string): ActionType[] {
-    const player = this.getPlayer(playerId);
-    if (!player) {
-      return [];
-    }
-
-    return Object.values(ActionType).filter((action) =>
-      this.canPerformAction(playerId, action)
-    );
-  }
-
-  getCurrentPlayer(): Player | null {
-    return this.state.players[this.state.currentPlayerIndex] || null;
-  }
-
-  getPlayer(playerId: string): Player | null {
-    return this.state.players.find((p) => p.id === playerId) || null;
-  }
-
-  private addLog(message: string): void {
-    this.state.gameLog.push(message);
-    // Keep only last 50 log entries
-    if (this.state.gameLog.length > 50) {
-      this.state.gameLog.shift();
-    }
+  /**
+   * Add log entry
+   */
+  private addLog(entry: Omit<GameLogEntry, 'id' | 'timestamp'>): void {
+    this.state.gameLog.push({
+      ...entry,
+      id: uuidv4(),
+      timestamp: Date.now()
+    });
   }
 }
-

@@ -26,13 +26,13 @@ export function getCardName(cardType: CardType): string {
  */
 export function getActionName(actionType: ActionType): string {
   switch (actionType) {
-    case ActionType.DUKE_TAX:
+    case ActionType.TAX:
       return 'Taxar (Conde)';
-    case ActionType.CAPTAIN_STEAL:
+    case ActionType.STEAL:
       return 'Roubar (Pirata)';
-    case ActionType.ASSASSIN_KILL:
+    case ActionType.ASSASSINATE:
       return 'Assassinar (Mercenário)';
-    case ActionType.AMBASSADOR_EXCHANGE:
+    case ActionType.EXCHANGE:
       return 'Trocar (Diplomata)';
     case ActionType.INCOME:
       return 'Renda';

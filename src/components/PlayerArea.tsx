@@ -18,14 +18,14 @@ export default function PlayerArea({
   showCards = false,
   onCardSelect,
 }: PlayerAreaProps) {
-  const aliveCards = player.cards.filter((c) => !c.revealed);
+  const aliveCards = (player.influences || []).filter((c) => !c.isRevealed);
 
   return (
     <Card
       style={[
         styles.card,
         isCurrentPlayer && styles.currentPlayerCard,
-        !player.isAlive && styles.deadPlayerCard,
+        player.isEliminated && styles.deadPlayerCard,
       ]}
     >
       <Card.Content>
@@ -39,7 +39,7 @@ export default function PlayerArea({
                 Seu Turno
               </Chip>
             )}
-            {!player.isAlive && (
+            {player.isEliminated && (
               <Chip mode="flat" style={styles.deadChip}>
                 Eliminado
               </Chip>
@@ -61,7 +61,7 @@ export default function PlayerArea({
             Cartas ({aliveCards.length} vivas)
           </Text>
           <CardHand
-            cards={player.cards}
+            cards={player.influences || []}
             revealed={showCards && isCurrentPlayer}
             onCardSelect={onCardSelect}
             showImages={showCards && isCurrentPlayer}

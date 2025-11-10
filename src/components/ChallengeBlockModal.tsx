@@ -7,19 +7,22 @@ import {
   Button,
   ProgressBar,
 } from 'react-native-paper';
-import { GamePhase, CardType, Player, ActionType } from '../types';
+import { CardType, Player, ActionType, Character, CounterActionType } from '../types';
+import { characterToCardType } from '../types';
 import { CHALLENGE_TIMER, BLOCK_TIMER } from '../constants/rules';
-import { getCardName, getActionName } from '../utils/cardTranslations';
+import { getCardColor } from '../utils/cardTranslations';
+import { getCharacterName, getActionName } from '../i18n';
+import { useTranslation } from 'react-i18next';
 import { COLORS } from '../constants/colors';
 
 interface ChallengeBlockModalProps {
   visible: boolean;
-  gamePhase: GamePhase;
+  gamePhase: string; // 'challenge' | 'counteraction' | 'challenge_counteraction'
   pendingAction: any;
   currentPlayer: Player | null;
   allPlayers: Player[];
   onChallenge: (challengerId: string) => void;
-  onBlock: (blockerId: string, blockingCard: CardType) => void;
+  onBlock: (blockerId: string, blockingCharacter: Character) => void;
   onSkip: () => void;
 }
 
@@ -33,10 +36,11 @@ export default function ChallengeBlockModal({
   onBlock,
   onSkip,
 }: ChallengeBlockModalProps) {
+  const { t } = useTranslation();
   const [timeRemaining, setTimeRemaining] = useState(10);
-  const [selectedBlockingCard, setSelectedBlockingCard] = useState<CardType | null>(null);
+  const [selectedBlockingCharacter, setSelectedBlockingCharacter] = useState<Character | null>(null);
 
-  const timer = gamePhase === GamePhase.WAITING_CHALLENGE
+  const timer = gamePhase === 'challenge'
     ? CHALLENGE_TIMER
     : BLOCK_TIMER;
 
@@ -67,26 +71,35 @@ export default function ChallengeBlockModal({
     return null;
   }
 
-  const actionPlayer = allPlayers.find((p) => p.id === pendingAction.playerId);
+  const actionPlayer = allPlayers.find((p) => p.id === pendingAction?.action?.actorId);
   const canChallengePlayers = allPlayers.filter(
-    (p) => p.id !== pendingAction.playerId && p.isAlive
+    (p) => p.id !== pendingAction?.action?.actorId && !p.isEliminated
   );
   const canBlockPlayers = allPlayers.filter(
-    (p) => p.id !== pendingAction.playerId && p.isAlive
+    (p) => p.id !== pendingAction?.action?.targetId && !p.isEliminated
   );
 
   const getActionLabel = (actionType: string): string => {
-    // Usar função utilitária se for um ActionType válido
     try {
       return getActionName(actionType as ActionType);
     } catch {
-      // Fallback para strings não mapeadas
       return actionType.replace(/_/g, ' ');
     }
   };
 
-  const getBlockingCards = (): CardType[] => {
-    return pendingAction.blockingCards || [];
+  const getBlockingCharacters = (): Character[] => {
+    if (!pendingAction?.action) return [];
+    const actionType = pendingAction.action.type;
+    
+    // Determine which characters can block this action
+    if (actionType === ActionType.FOREIGN_AID) {
+      return [Character.DUKE];
+    } else if (actionType === ActionType.ASSASSINATE) {
+      return [Character.CONTESSA];
+    } else if (actionType === ActionType.STEAL) {
+      return [Character.CAPTAIN, Character.AMBASSADOR];
+    }
+    return [];
   };
 
   const progress = timeRemaining / 10;
@@ -100,34 +113,36 @@ export default function ChallengeBlockModal({
       <Card style={styles.card}>
         <Card.Content>
           <Text variant="headlineSmall" style={styles.title}>
-            {gamePhase === GamePhase.WAITING_CHALLENGE
-              ? 'Fase de Desafio'
-              : 'Fase de Bloqueio'}
+            {gamePhase === 'challenge'
+              ? t('phases.challenge')
+              : t('phases.counteraction')}
           </Text>
 
           <Text variant="bodyLarge" style={styles.actionText}>
-            {actionPlayer?.name} executou:{' '}
-            {getActionLabel(pendingAction.type)}
+            {t('log.action_taken', { 
+              playerName: actionPlayer?.name || '',
+              action: getActionLabel(pendingAction?.action?.type || '')
+            })}
           </Text>
 
-          {pendingAction.targetPlayerId && (
+          {pendingAction?.action?.targetId && (
             <Text variant="bodyMedium" style={styles.targetText}>
-              Alvo:{' '}
-              {allPlayers.find((p) => p.id === pendingAction.targetPlayerId)?.name}
+              {t('game.selectTarget')}:{' '}
+              {allPlayers.find((p) => p.id === pendingAction.action.targetId)?.name}
             </Text>
           )}
 
           <View style={styles.timerContainer}>
             <ProgressBar progress={progress} color={COLORS.danger} />
             <Text variant="bodySmall" style={styles.timerText}>
-              {Math.ceil(timeRemaining)}s restantes
+              {Math.ceil(timeRemaining)}s {t('game.remaining', { defaultValue: 'restantes' })}
             </Text>
           </View>
 
-          {gamePhase === GamePhase.WAITING_CHALLENGE && (
+          {gamePhase === 'challenge' && (
             <View style={styles.actionsContainer}>
               <Text variant="titleMedium" style={styles.sectionTitle}>
-                Desafiar esta ação?
+                {t('game.challenge')} {t('game.thisAction', { defaultValue: 'esta ação' })}?
               </Text>
               {canChallengePlayers.map((player) => (
                 <Button
@@ -142,25 +157,25 @@ export default function ChallengeBlockModal({
             </View>
           )}
 
-          {gamePhase === GamePhase.WAITING_BLOCK && (
+          {(gamePhase === 'counteraction' || gamePhase === 'challenge_counteraction') && (
             <View style={styles.actionsContainer}>
               <Text variant="titleMedium" style={styles.sectionTitle}>
-                Bloquear esta ação?
+                {t('game.block')} {t('game.thisAction', { defaultValue: 'esta ação' })}?
               </Text>
-              {getBlockingCards().map((cardType) => (
+              {getBlockingCharacters().map((character) => (
                 <TouchableOpacity
-                  key={cardType}
-                  onPress={() => setSelectedBlockingCard(cardType)}
+                  key={character}
+                  onPress={() => setSelectedBlockingCharacter(character)}
                   style={[
                     styles.chipButton,
-                    selectedBlockingCard === cardType && styles.chipButtonSelected,
+                    selectedBlockingCharacter === character && styles.chipButtonSelected,
                   ]}
                 >
                   <Text style={[
                     styles.chipText,
-                    selectedBlockingCard === cardType && styles.chipTextSelected,
+                    selectedBlockingCharacter === character && styles.chipTextSelected,
                   ]}>
-                    {getCardName(cardType)}
+                    {getCharacterName(character)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -169,11 +184,11 @@ export default function ChallengeBlockModal({
                   key={player.id}
                   mode="contained"
                   onPress={() => {
-                    if (selectedBlockingCard) {
-                      onBlock(player.id, selectedBlockingCard);
+                    if (selectedBlockingCharacter) {
+                      onBlock(player.id, selectedBlockingCharacter);
                     }
                   }}
-                  disabled={!selectedBlockingCard}
+                  disabled={!selectedBlockingCharacter}
                   style={styles.actionButton}
                 >
                   {player.name} Bloqueia
@@ -187,7 +202,7 @@ export default function ChallengeBlockModal({
             onPress={onSkip}
             style={styles.skipButton}
           >
-            Pular
+            {t('game.allowAction')}
           </Button>
         </Card.Content>
       </Card>

@@ -1,11 +1,11 @@
 import React, { useRef } from 'react';
 import { View, StyleSheet, FlatList, Animated } from 'react-native';
-import { CardState } from '../types';
+import { Card as CardType, characterToCardType } from '../types';
 import Card from './Card';
 import { CARD_DIMENSIONS } from '../constants/dimensions';
 
 interface CardHandProps {
-  cards: CardState[];
+  cards: CardType[];
   revealed?: boolean;
   onCardSelect?: (cardIndex: number) => void;
   selectedCardIndex?: number | null;
@@ -37,7 +37,7 @@ export default function CardHand({
     Animated.stagger(50, animations).start();
   }, [cards.length]);
 
-  const renderCard = ({ item, index }: { item: CardState; index: number }) => {
+  const renderCard = ({ item, index }: { item: CardType; index: number }) => {
     const animatedStyle = {
       opacity: animatedValues[index],
       transform: [
@@ -67,8 +67,8 @@ export default function CardHand({
         ]}
       >
         <Card
-          character={item.type}
-          revealed={revealed}
+          character={characterToCardType(item.character)}
+          revealed={revealed || item.isRevealed}
           size="hand"
           onPress={() => onCardSelect?.(index)}
           showImage={showImages}

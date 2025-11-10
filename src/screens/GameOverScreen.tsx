@@ -1,12 +1,16 @@
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated } from 'react-native';
 import { Text, Button, Card } from 'react-native-paper';
+import { useTranslation } from 'react-i18next';
 import { useGame } from '../context/GameContext';
 import { COLORS } from '../constants/colors';
 
 export default function GameOverScreen({ navigation }: any) {
+  const { t } = useTranslation();
   const { gameState, dispatch } = useGame();
-  const winner = gameState.winner;
+  const winner = gameState.winnerId 
+    ? gameState.players.find(p => p.id === gameState.winnerId)
+    : null;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.5)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -86,19 +90,19 @@ export default function GameOverScreen({ navigation }: any) {
         <Card style={styles.card}>
           <Card.Content style={styles.content}>
             <Text variant="headlineLarge" style={styles.title}>
-              🎮 Fim de Jogo!
+              🎮 {t('game.gameOver')}
             </Text>
 
             {winner ? (
               <>
                 <View style={styles.winnerContainer}>
                   <Text variant="headlineMedium" style={styles.winnerText}>
-                    🏆 {winner.name} Venceu! 🏆
+                    🏆 {t('log.game_won', { playerName: winner.name })} 🏆
                   </Text>
                   <View style={styles.winnerInfo}>
                     <View style={styles.statBox}>
                       <Text variant="bodyLarge" style={styles.statLabel}>
-                        💰 Moedas Finais
+                        💰 {t('game.finalCoins', { defaultValue: 'Moedas Finais' })}
                       </Text>
                       <Text variant="headlineSmall" style={styles.statValue}>
                         {winner.coins}
@@ -106,10 +110,10 @@ export default function GameOverScreen({ navigation }: any) {
                     </View>
                     <View style={styles.statBox}>
                       <Text variant="bodyLarge" style={styles.statLabel}>
-                        🎴 Cartas Restantes
+                        🎴 {t('game.remainingCards', { defaultValue: 'Cartas Restantes' })}
                       </Text>
                       <Text variant="headlineSmall" style={styles.statValue}>
-                        {winner.cards.filter((c) => !c.revealed).length}
+                        {(winner.influences || []).filter((c) => !c.isRevealed).length}
                       </Text>
                     </View>
                   </View>
@@ -117,18 +121,18 @@ export default function GameOverScreen({ navigation }: any) {
               </>
             ) : (
               <Text variant="bodyLarge" style={styles.noWinnerText}>
-                Nenhum vencedor determinado
+                {t('game.noWinner', { defaultValue: 'Nenhum vencedor determinado' })}
               </Text>
             )}
 
             <View style={styles.playersList}>
               <Text variant="titleMedium" style={styles.playersTitle}>
-                📊 Classificação Final
+                📊 {t('game.finalRanking', { defaultValue: 'Classificação Final' })}
               </Text>
               {gameState.players
                 .sort((a, b) => {
-                  if (a.isAlive && !b.isAlive) return -1;
-                  if (!a.isAlive && b.isAlive) return 1;
+                  if (!a.isEliminated && b.isEliminated) return -1;
+                  if (a.isEliminated && !b.isEliminated) return 1;
                   return b.coins - a.coins;
                 })
                 .map((player, index) => (
@@ -136,7 +140,7 @@ export default function GameOverScreen({ navigation }: any) {
                     key={player.id}
                     style={[
                       styles.playerRow,
-                      player.isAlive && styles.winnerRow,
+                      !player.isEliminated && styles.winnerRow,
                     ]}
                   >
                     <View style={styles.playerRank}>
@@ -147,16 +151,16 @@ export default function GameOverScreen({ navigation }: any) {
                     <View style={styles.playerDetails}>
                       <Text variant="bodyLarge" style={styles.playerName}>
                         {player.name}
-                        {player.isAlive && (
+                        {!player.isEliminated && (
                           <Text style={styles.winnerBadge}> 👑</Text>
                         )}
                       </Text>
                       <View style={styles.playerStats}>
                         <Text variant="bodySmall" style={styles.playerStat}>
-                          💰 {player.coins} moedas
+                          💰 {player.coins} {t('game.coins')}
                         </Text>
                         <Text variant="bodySmall" style={styles.playerStat}>
-                          🎴 {player.cards.filter((c) => !c.revealed).length} cartas
+                          🎴 {(player.influences || []).filter((c) => !c.isRevealed).length} {t('game.cards', { defaultValue: 'cartas' })}
                         </Text>
                       </View>
                     </View>
@@ -173,7 +177,7 @@ export default function GameOverScreen({ navigation }: any) {
                 buttonColor={COLORS.buttonPrimary}
                 textColor={COLORS.background}
               >
-                🎮 Novo Jogo
+                🎮 {t('game.newGame', { defaultValue: 'Novo Jogo' })}
               </Button>
               <Button
                 mode="outlined"
@@ -187,7 +191,7 @@ export default function GameOverScreen({ navigation }: any) {
                   },
                 }}
               >
-                🏠 Voltar ao Menu
+                🏠 {t('game.backToMenu', { defaultValue: 'Voltar ao Menu' })}
               </Button>
             </View>
           </Card.Content>

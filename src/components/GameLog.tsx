@@ -3,11 +3,16 @@ import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text } from 'react-native-paper';
 import { COLORS } from '../constants/colors';
 
+import { GameLogEntry } from '../types';
+import { useTranslation } from 'react-i18next';
+
 interface GameLogProps {
-  logs: string[];
+  logs: GameLogEntry[];
 }
 
 export default function GameLog({ logs }: GameLogProps) {
+  const { t } = useTranslation();
+  
   return (
     <ScrollView style={styles.logContainer} nestedScrollEnabled>
       {logs.length === 0 ? (
@@ -15,13 +20,20 @@ export default function GameLog({ logs }: GameLogProps) {
           Nenhum evento ainda
         </Text>
       ) : (
-        logs.slice().reverse().map((log, index) => (
-          <View key={index} style={styles.logEntry}>
-            <Text variant="bodySmall" style={styles.logText}>
-              {log}
-            </Text>
-          </View>
-        ))
+        logs.slice().reverse().map((log, index) => {
+          // Use translation if available, otherwise use message
+          const logMessage = log.translationKey 
+            ? t(log.translationKey, log.translationParams || {})
+            : log.message;
+          
+          return (
+            <View key={log.id || index} style={styles.logEntry}>
+              <Text variant="bodySmall" style={styles.logText}>
+                {logMessage}
+              </Text>
+            </View>
+          );
+        })
       )}
     </ScrollView>
   );

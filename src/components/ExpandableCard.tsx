@@ -1,24 +1,18 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Animated, Image } from 'react-native';
-import { Text, Card } from 'react-native-paper';
-import { CardType, CardState } from '../types';
-import { getCardName, getCardColor, getCardImage } from '../utils/cardTranslations';
+import { Text, Card as PaperCard } from 'react-native-paper';
+import { useTranslation } from 'react-i18next';
+import { CardType, Card, characterToCardType } from '../types';
+import { getCardColor, getCardImage } from '../utils/cardTranslations';
+import { getCharacterName } from '../i18n';
 import { COLORS } from '../constants/colors';
 
 interface ExpandableCardProps {
-  card: CardState;
+  card: Card;
   cardIndex: number;
   showCardType: boolean; // Whether to show the actual card type (for current player)
   onPress?: () => void;
 }
-
-const CARD_DESCRIPTIONS: Record<CardType, string> = {
-  [CardType.DUKE]: 'Bloqueia Ajuda Externa. Ação: Receba 3 moedas.',
-  [CardType.CAPTAIN]: 'Bloqueia Roubo. Ação: Roube 2 moedas de outro jogador.',
-  [CardType.ASSASSIN]: 'Ação: Pague 3 moedas para assassinar um jogador (bloqueado pela Cortesã).',
-  [CardType.AMBASSADOR]: 'Bloqueia Roubo. Ação: Troque cartas com o baralho.',
-  [CardType.CONTESSA]: 'Bloqueia Assassinato.',
-};
 
 export default function ExpandableCard({
   card,
@@ -26,6 +20,7 @@ export default function ExpandableCard({
   showCardType,
   onPress,
 }: ExpandableCardProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [animation] = useState(new Animated.Value(0));
 
@@ -42,8 +37,9 @@ export default function ExpandableCard({
     onPress?.();
   };
 
-  const cardColor = showCardType ? getCardColor(card.type) : COLORS.backgroundLight;
-  const backgroundColor = card.revealed ? COLORS.textSecondary + '40' : cardColor;
+  const cardType = characterToCardType(card.character);
+  const cardColor = showCardType ? getCardColor(cardType) : COLORS.backgroundLight;
+  const backgroundColor = card.isRevealed ? COLORS.textSecondary + '40' : cardColor;
 
   const heightInterpolation = animation.interpolate({
     inputRange: [0, 1],
@@ -71,10 +67,10 @@ export default function ExpandableCard({
           ]}
         >
           <View style={styles.cardHeader}>
-            {(showCardType || card.revealed) && getCardImage(card.type) ? (
+            {(showCardType || card.isRevealed) && getCardImage(cardType) ? (
               <View style={styles.imageWrapper}>
                 <Image
-                  source={getCardImage(card.type)}
+                  source={getCardImage(cardType)}
                   style={styles.cardImage}
                   resizeMode="contain"
                 />
@@ -95,21 +91,24 @@ export default function ExpandableCard({
               },
             ]}
           >
-            {expanded && (showCardType || card.revealed) && (
+            {expanded && (showCardType || card.isRevealed) && (
               <View style={styles.expandedInfo}>
-                <Text style={[styles.cardName, card.revealed && styles.revealedCardName]}>
-                  {getCardName(card.type)}
+                <Text style={[styles.cardName, card.isRevealed && styles.revealedCardName]}>
+                  {getCharacterName(card.character)}
                 </Text>
-                <Text style={[styles.cardDescription, card.revealed && styles.revealedCardDescription]}>
-                  {CARD_DESCRIPTIONS[card.type]}
+                <Text style={[styles.cardDescription, card.isRevealed && styles.revealedCardDescription]}>
+                  {t(`abilityDescriptions.${card.character}_action`, { defaultValue: '' }) || 
+                   t(`abilityDescriptions.${card.character}_counter`, { defaultValue: '' })}
                 </Text>
               </View>
             )}
-            {expanded && !showCardType && !card.revealed && (
+            {expanded && !showCardType && !card.isRevealed && (
               <View style={styles.expandedInfo}>
-                <Text style={styles.hiddenCardText}>Carta Ocultada</Text>
+                <Text style={styles.hiddenCardText}>
+                  {t('game.hiddenCard', { defaultValue: 'Carta Ocultada' })}
+                </Text>
                 <Text style={styles.hiddenCardSubtext}>
-                  Você não pode ver esta carta
+                  {t('game.cannotSeeCard', { defaultValue: 'Você não pode ver esta carta' })}
                 </Text>
               </View>
             )}

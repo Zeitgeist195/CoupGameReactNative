@@ -1,9 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated } from 'react-native';
 import { Card, Text, Chip } from 'react-native-paper';
-import { Player, CardType } from '../types';
+import { useTranslation } from 'react-i18next';
+import { Player, Character } from '../types';
+import { characterToCardType } from '../types';
 import ExpandableCard from './ExpandableCard';
-import { getCardName, getCardColor } from '../utils/cardTranslations';
+import { getCardColor } from '../utils/cardTranslations';
+import { getCharacterName } from '../i18n';
 import { COLORS } from '../constants/colors';
 
 interface PlayerCardProps {
@@ -19,6 +22,7 @@ export default function PlayerCard({
   onSelect,
   showCards = false,
 }: PlayerCardProps) {
+  const { t } = useTranslation();
   const coinsAnim = useRef(new Animated.Value(player.coins)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const previousCoins = useRef(player.coins);
@@ -79,8 +83,8 @@ export default function PlayerCard({
   }, [isCurrentPlayer]);
 
 
-  const aliveCards = player.cards.filter((c) => !c.revealed);
-  const revealedCards = player.cards.filter((c) => c.revealed);
+  const aliveCards = (player.influences || []).filter((c) => !c.isRevealed);
+  const revealedCards = (player.influences || []).filter((c) => c.isRevealed);
 
   return (
     <Animated.View
@@ -92,7 +96,7 @@ export default function PlayerCard({
         style={[
           styles.card,
           isCurrentPlayer && styles.currentPlayerCard,
-          !player.isAlive && styles.deadPlayerCard,
+          player.isEliminated && styles.deadPlayerCard,
         ]}
         onPress={onSelect}
         disabled={!onSelect}
@@ -104,12 +108,12 @@ export default function PlayerCard({
             </Text>
             {isCurrentPlayer && (
               <Chip mode="flat" style={styles.currentChip}>
-                Seu Turno
+                {t('game.yourTurn')}
               </Chip>
             )}
-            {!player.isAlive && (
+            {player.isEliminated && (
               <Chip mode="flat" style={styles.deadChip}>
-                Eliminado
+                {t('game.eliminated')}
               </Chip>
             )}
           </View>
@@ -119,28 +123,28 @@ export default function PlayerCard({
               {player.coins}
             </Animated.Text>
             <Text variant="bodySmall" style={styles.coinsLabel}>
-              💰 Moedas
+              💰 {t('game.coins')}
             </Text>
           </View>
 
         <View style={styles.cardsContainer}>
           <Text variant="bodySmall" style={styles.cardsLabel}>
-            Cartas ({aliveCards.length} vivas)
+            {t('game.influences')} ({aliveCards.length} {t('game.alive', { defaultValue: 'vivas' })})
           </Text>
           <View style={styles.cardsRow}>
-            {player.cards.map((card, index) => (
+            {(player.influences || []).map((card, index) => (
               <ExpandableCard
                 key={index}
                 card={card}
                 cardIndex={index}
-                showCardType={showCards || card.revealed}
+                showCardType={showCards || card.isRevealed}
               />
             ))}
           </View>
           {revealedCards.length > 0 && (
             <View style={styles.revealedContainer}>
               <Text variant="bodySmall" style={styles.revealedLabel}>
-                Reveladas:
+                {t('game.revealed', { defaultValue: 'Reveladas' })}:
               </Text>
               {revealedCards.map((card, index) => (
                 <Chip
@@ -148,10 +152,10 @@ export default function PlayerCard({
                   mode="outlined"
                   style={[
                     styles.revealedChip,
-                    { borderColor: getCardColor(card.type) },
+                    { borderColor: getCardColor(characterToCardType(card.character)) },
                   ]}
                 >
-                  {getCardName(card.type)}
+                  {getCharacterName(card.character)}
                 </Chip>
               ))}
             </View>

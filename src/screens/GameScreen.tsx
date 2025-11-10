@@ -12,14 +12,17 @@ import PlayerCard from '../components/PlayerCard';
 import ActionButtons from '../components/ActionButtons';
 import ChallengeBlockModal from '../components/ChallengeBlockModal';
 import CardSelectionModal from '../components/CardSelectionModal';
+import AmbassadorExchangeModal from '../components/AmbassadorExchangeModal';
 import GameLog from '../components/GameLog';
 import Toast from '../components/Toast';
-import { GamePhase } from '../types';
+import { useTranslation } from 'react-i18next';
 import { COLORS } from '../constants/colors';
+import { Character, ActionType } from '../types';
 
 const { width } = Dimensions.get('window');
 
 export default function GameScreen({ navigation }: any) {
+  const { t } = useTranslation();
   const { gameState, game, dispatch } = useGame();
   const [showCards, setShowCards] = useState(false);
   const [showLogModal, setShowLogModal] = useState(false);
@@ -31,28 +34,29 @@ export default function GameScreen({ navigation }: any) {
   const previousLogLength = React.useRef(gameState.gameLog.length);
 
   useEffect(() => {
-    if (gameState.gamePhase === GamePhase.GAME_OVER) {
+    if (gameState.gameOver) {
       navigation.navigate('GameOver');
     }
-  }, [gameState.gamePhase, navigation]);
+  }, [gameState.gameOver, navigation]);
 
   // Mostrar toast quando há nova entrada no log
   useEffect(() => {
     if (gameState.gameLog.length > previousLogLength.current) {
-      const newLog = gameState.gameLog[gameState.gameLog.length - 1];
-      const logLower = newLog.toLowerCase();
+      const newLogEntry = gameState.gameLog[gameState.gameLog.length - 1];
+      const logMessage = newLogEntry.message || '';
+      const logLower = logMessage.toLowerCase();
       
       let type: 'success' | 'error' | 'info' | 'warning' = 'info';
-      if (logLower.includes('eliminado') || logLower.includes('perde')) {
+      if (logLower.includes('eliminado') || logLower.includes('perde') || logLower.includes('loses')) {
         type = 'error';
-      } else if (logLower.includes('ganhou') || logLower.includes('recebeu')) {
+      } else if (logLower.includes('ganhou') || logLower.includes('recebeu') || logLower.includes('wins') || logLower.includes('gains')) {
         type = 'success';
-      } else if (logLower.includes('desafio') || logLower.includes('bloqueio')) {
+      } else if (logLower.includes('desafio') || logLower.includes('bloqueio') || logLower.includes('challenge') || logLower.includes('block')) {
         type = 'warning';
       }
 
       setToast({
-        message: newLog,
+        message: logMessage,
         type,
         visible: true,
       });
@@ -65,9 +69,24 @@ export default function GameScreen({ navigation }: any) {
     (p) => p.id !== currentPlayer?.id
   );
 
-  const handleAction = (action: any, targetId?: string) => {
+  const handleAction = (action: ActionType, targetId?: string) => {
     try {
-      dispatch({ type: 'EXECUTE_ACTION', payload: { action, targetId } });
+      // Determine claimedCharacter based on action type
+      let claimedCharacter: Character | undefined;
+      if (action === ActionType.TAX) {
+        claimedCharacter = Character.DUKE;
+      } else if (action === ActionType.STEAL) {
+        claimedCharacter = Character.CAPTAIN;
+      } else if (action === ActionType.ASSASSINATE) {
+        claimedCharacter = Character.ASSASSIN;
+      } else if (action === ActionType.EXCHANGE) {
+        claimedCharacter = Character.AMBASSADOR;
+      }
+      
+      dispatch({ 
+        type: 'EXECUTE_ACTION', 
+        payload: { action, targetId, claimedCharacter } 
+      });
     } catch (error: any) {
       Alert.alert('Erro', error.message || 'Não foi possível executar a ação');
     }
@@ -81,11 +100,11 @@ export default function GameScreen({ navigation }: any) {
     }
   };
 
-  const handleBlock = (blockerId: string, blockingCard: any) => {
+  const handleBlock = (blockerId: string, blockingCharacter: Character) => {
     try {
       dispatch({
         type: 'BLOCK_ACTION',
-        payload: { blockerId, blockingCard },
+        payload: { blockerId, blockingCharacter },
       });
     } catch (error: any) {
       Alert.alert('Erro', error.message || 'Não foi possível bloquear a ação');
@@ -111,8 +130,8 @@ export default function GameScreen({ navigation }: any) {
   const handleSelectCard = (cardIndex: number) => {
     // Find the player who needs to select a card
     const playerSelectingCard = gameState.players.find((p) => {
-      if (!p.isAlive) return false;
-      const aliveCards = p.cards.filter((c) => !c.revealed);
+      if (p.isEliminated) return false;
+      const aliveCards = p.influences.filter((c) => !c.isRevealed);
       return aliveCards.length > 1;
     });
 
@@ -129,47 +148,59 @@ export default function GameScreen({ navigation }: any) {
     }
   };
 
+  const phaseType = gameState.phase.type;
   const showChallengeBlockModal =
-    gameState.gamePhase === GamePhase.WAITING_CHALLENGE ||
-    gameState.gamePhase === GamePhase.WAITING_BLOCK;
+    phaseType === 'challenge' ||
+    phaseType === 'counteraction' ||
+    phaseType === 'challenge_counteraction';
 
-  const showCardSelectionModal =
-    gameState.gamePhase === GamePhase.CARD_LOSS_SELECTION;
+  const showCardSelectionModal = phaseType === 'card_selection';
+  
+  // Check if this is an Ambassador Exchange
+  const isAmbassadorExchange = 
+    phaseType === 'card_selection' &&
+    gameState.pendingAction?.action.type === ActionType.EXCHANGE &&
+    gameState.pendingAction?.ambassadorAllCards;
 
-  // Find the player who needs to select a card to lose
+  // Find the player who needs to select a card to lose (for non-exchange cases)
   const playerSelectingCard = gameState.players.find((p) => {
-    if (!p.isAlive) return false;
-    const aliveCards = p.cards.filter((c) => !c.revealed);
+    if (p.isEliminated) return false;
+    const aliveCards = p.influences.filter((c) => !c.isRevealed);
     return aliveCards.length > 1;
   });
 
-  const getPhaseLabel = (phase: GamePhase): string => {
-    switch (phase) {
-      case GamePhase.ACTION_SELECTION:
-        return 'Seleção de Ação';
-      case GamePhase.WAITING_CHALLENGE:
-        return 'Aguardando Desafio';
-      case GamePhase.WAITING_BLOCK:
-        return 'Aguardando Bloqueio';
-      case GamePhase.CARD_LOSS_SELECTION:
-        return 'Seleção de Carta';
-      case GamePhase.GAME_OVER:
-        return 'Fim de Jogo';
+  const getPhaseLabel = (phaseType: string): string => {
+    switch (phaseType) {
+      case 'action':
+        return t('phases.action');
+      case 'challenge':
+        return t('phases.challenge');
+      case 'counteraction':
+        return t('phases.counteraction');
+      case 'challenge_counteraction':
+        return t('phases.challenge_counteraction', { defaultValue: 'Desafiando Bloqueio' });
+      case 'card_selection':
+        return t('phases.card_selection');
+      case 'resolution':
+        return t('phases.resolution');
       default:
-        return 'Jogo em Andamento';
+        return t('game.inProgress', { defaultValue: 'Jogo em Andamento' });
     }
   };
 
-  const getPhaseColor = (phase: GamePhase): string => {
-    switch (phase) {
-      case GamePhase.ACTION_SELECTION:
+  const getPhaseColor = (phaseType: string): string => {
+    switch (phaseType) {
+      case 'action':
         return COLORS.info;
-      case GamePhase.WAITING_CHALLENGE:
+      case 'challenge':
+      case 'challenge_counteraction':
         return COLORS.warning;
-      case GamePhase.WAITING_BLOCK:
+      case 'counteraction':
         return COLORS.warning;
-      case GamePhase.CARD_LOSS_SELECTION:
+      case 'card_selection':
         return COLORS.danger;
+      case 'resolution':
+        return COLORS.success;
       default:
         return COLORS.textSecondary;
     }
@@ -178,7 +209,7 @@ export default function GameScreen({ navigation }: any) {
   if (!currentPlayer) {
     return (
       <View style={styles.container}>
-        <Text>No current player</Text>
+        <Text>{t('game.noCurrentPlayer', { defaultValue: 'No current player' })}</Text>
       </View>
     );
   }
@@ -222,18 +253,18 @@ export default function GameScreen({ navigation }: any) {
         </View>
         <View style={styles.headerInfo}>
           <Chip
-            style={[styles.phaseChip, { backgroundColor: getPhaseColor(gameState.gamePhase) + '30' }]}
+            style={[styles.phaseChip, { backgroundColor: getPhaseColor(phaseType) + '30' }]}
             textStyle={{ color: COLORS.textPrimary }}
           >
-            {getPhaseLabel(gameState.gamePhase)}
+            {getPhaseLabel(phaseType)}
           </Chip>
           {currentPlayer && (
             <View style={styles.turnInfo}>
               <Text variant="bodyMedium" style={styles.turnText}>
-                Turno: <Text style={styles.turnPlayerName}>{currentPlayer.name}</Text>
+                {t('log.player_turn', { playerName: currentPlayer.name })}
               </Text>
               <Text variant="bodySmall" style={styles.turnCoins}>
-                💰 {currentPlayer.coins} moedas
+                💰 {currentPlayer.coins} {t('game.coins')}
               </Text>
             </View>
           )}
@@ -250,7 +281,7 @@ export default function GameScreen({ navigation }: any) {
             <View key={player.id} style={styles.playerCardWrapper}>
               <PlayerCard
                 player={player}
-                isCurrentPlayer={player.isCurrentPlayer}
+                isCurrentPlayer={player.id === currentPlayer.id}
                 showCards={showCards && player.id === currentPlayer.id}
               />
             </View>
@@ -258,11 +289,11 @@ export default function GameScreen({ navigation }: any) {
         </View>
 
         {/* Painel de ações na parte inferior */}
-        {gameState.gamePhase === GamePhase.ACTION_SELECTION &&
-          currentPlayer.isCurrentPlayer && (
+        {phaseType === 'action' &&
+          currentPlayer && (
             <View style={styles.actionsPanel}>
               <Text variant="titleMedium" style={styles.actionsTitle}>
-                Seu Turno - Escolha uma Ação
+                {t('game.yourTurn')} - {t('game.selectAction')}
               </Text>
               <ActionButtons
                 currentPlayer={currentPlayer}
@@ -272,11 +303,11 @@ export default function GameScreen({ navigation }: any) {
             </View>
           )}
 
-        {gameState.gamePhase === GamePhase.ACTION_SELECTION &&
-          !currentPlayer.isCurrentPlayer && (
+        {phaseType === 'action' &&
+          !currentPlayer && (
             <View style={styles.waitingPanel}>
               <Text variant="titleMedium" style={styles.waitingText}>
-                ⏳ Aguardando {currentPlayer.name}...
+                ⏳ {t('game.waiting')}
               </Text>
             </View>
           )}
@@ -285,29 +316,49 @@ export default function GameScreen({ navigation }: any) {
       <Portal>
         <ChallengeBlockModal
           visible={showChallengeBlockModal}
-          gamePhase={gameState.gamePhase}
+          gamePhase={phaseType}
           pendingAction={gameState.pendingAction}
           currentPlayer={currentPlayer}
           allPlayers={gameState.players}
           onChallenge={handleChallenge}
           onBlock={handleBlock}
           onSkip={
-            gameState.gamePhase === GamePhase.WAITING_CHALLENGE
+            phaseType === 'challenge'
               ? handleSkipChallenge
               : handleSkipBlock
           }
         />
 
-        <CardSelectionModal
-          visible={showCardSelectionModal}
-          player={playerSelectingCard || currentPlayer}
-          onSelectCard={(cardIndex) => {
-            const player = playerSelectingCard || currentPlayer;
-            if (player) {
+        {isAmbassadorExchange ? (
+          <AmbassadorExchangeModal
+            visible={showCardSelectionModal}
+            allCards={gameState.pendingAction!.ambassadorAllCards!}
+            onComplete={(cardIndices) => {
+              try {
+                dispatch({
+                  type: 'COMPLETE_EXCHANGE',
+                  payload: {
+                    playerId: currentPlayer.id,
+                    cardIndices,
+                  },
+                });
+              } catch (error: any) {
+                Alert.alert('Erro', error.message || 'Erro ao completar troca');
+              }
+            }}
+          />
+        ) : (
+          <CardSelectionModal
+            visible={showCardSelectionModal}
+            player={playerSelectingCard || currentPlayer}
+            onSelectCard={(cardIndex) => {
+              const player = playerSelectingCard || currentPlayer;
+              if (player) {
               handleSelectCard(cardIndex);
             }
           }}
-        />
+          />
+        )}
 
         {/* Game Log Modal */}
         <GameLogModal
@@ -329,7 +380,7 @@ export default function GameScreen({ navigation }: any) {
 }
 
 // Componente Modal para Game Log
-function GameLogModal({ visible, logs, onDismiss }: { visible: boolean; logs: string[]; onDismiss: () => void }) {
+function GameLogModal({ visible, logs, onDismiss }: { visible: boolean; logs: any[]; onDismiss: () => void }) {
   if (!visible) return null;
   
   return (
@@ -338,7 +389,7 @@ function GameLogModal({ visible, logs, onDismiss }: { visible: boolean; logs: st
         <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
           <View style={styles.modalHeader}>
             <Text variant="titleLarge" style={styles.modalTitle}>
-              📜 Histórico do Jogo
+              📜 {t('game.gameLog', { defaultValue: 'Histórico do Jogo' })}
             </Text>
             <Button
               mode="text"

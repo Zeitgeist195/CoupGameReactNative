@@ -1,98 +1,254 @@
-// Card Types
-export enum CardType {
-  DUKE = 'DUKE', // Conde
-  CAPTAIN = 'CAPTAIN', // Pirata
-  ASSASSIN = 'ASSASSIN', // Mercenário
-  AMBASSADOR = 'AMBASSADOR', // Diplomata
-  CONTESSA = 'CONTESSA', // Cortesã
+// src/types/index.ts
+// All game types and interfaces in English
+
+export enum Character {
+  DUKE = 'duke',
+  ASSASSIN = 'assassin',
+  CAPTAIN = 'captain',
+  AMBASSADOR = 'ambassador',
+  CONTESSA = 'contessa'
 }
 
-// Função para obter o nome em português
-export function getCardTypeName(cardType: CardType): string {
-  switch (cardType) {
-    case CardType.DUKE:
-      return 'CONDE';
-    case CardType.CAPTAIN:
-      return 'PIRATA';
-    case CardType.ASSASSIN:
-      return 'MERCENÁRIO';
-    case CardType.AMBASSADOR:
-      return 'DIPLOMATA';
-    case CardType.CONTESSA:
-      return 'CORTESÃ';
-    default:
-      return cardType;
+export enum ActionType {
+  // General actions (cannot be challenged)
+  INCOME = 'income',
+  FOREIGN_AID = 'foreign_aid',
+  COUP = 'coup',
+  
+  // Character actions (can be challenged)
+  TAX = 'tax',                    // Duke
+  ASSASSINATE = 'assassinate',    // Assassin
+  STEAL = 'steal',                // Captain
+  EXCHANGE = 'exchange'           // Ambassador
+}
+
+export enum CounterActionType {
+  BLOCK_FOREIGN_AID = 'block_foreign_aid',      // Duke
+  BLOCK_ASSASSINATION = 'block_assassination',  // Contessa
+  BLOCK_STEALING = 'block_stealing'             // Captain or Ambassador
+}
+
+export interface Card {
+  character: Character;
+  isRevealed: boolean;
+}
+
+export interface Player {
+  id: string;
+  name: string;
+  coins: number;
+  influences: Card[];  // Always 2 cards (or less when eliminated)
+  isEliminated: boolean;
+  isAI: boolean;
+}
+
+export interface Action {
+  type: ActionType;
+  actorId: string;
+  targetId?: string;
+  claimedCharacter?: Character;  // For character actions
+}
+
+export interface CounterAction {
+  type: CounterActionType;
+  actorId: string;
+  claimedCharacter: Character;
+}
+
+export interface Challenge {
+  challengerId: string;
+  targetId: string;
+  isForAction: boolean;  // true = challenging action, false = challenging counteraction
+}
+
+export interface GamePhase {
+  type: 'action' | 'challenge' | 'counteraction' | 'challenge_counteraction' | 'resolution' | 'card_selection';
+  description: string;
+}
+
+export interface PendingAction {
+  action: Action;
+  counterAction?: CounterAction;
+  challenge?: Challenge;
+  awaitingResponse: boolean;
+  // For Ambassador Exchange: temporary storage of drawn cards
+  ambassadorDrawnCards?: Character[];  // The 2 cards drawn from deck
+  ambassadorAllCards?: Card[];  // All 4 cards (2 original + 2 drawn) for selection
+}
+
+export interface GameState {
+  players: Player[];
+  currentPlayerIndex: number;
+  courtDeck: Character[];  // Remaining cards in deck
+  phase: GamePhase;
+  pendingAction: PendingAction | null;
+  gameLog: GameLogEntry[];
+  gameOver: boolean;
+  winnerId: string | null;
+}
+
+export interface GameLogEntry {
+  id: string;
+  timestamp: number;
+  type: 'action' | 'challenge' | 'counteraction' | 'resolution' | 'elimination';
+  message: string;  // Will be translated in UI
+  playerId: string;
+  translationKey: string;  // Key for i18n
+  translationParams?: Record<string, any>;  // Parameters for translation
+}
+
+export interface CharacterAbility {
+  character: Character;
+  action?: ActionType;
+  counterActions: CounterActionType[];
+}
+
+// Character abilities mapping
+export const CHARACTER_ABILITIES: Record<Character, CharacterAbility> = {
+  [Character.DUKE]: {
+    character: Character.DUKE,
+    action: ActionType.TAX,
+    counterActions: [CounterActionType.BLOCK_FOREIGN_AID]
+  },
+  [Character.ASSASSIN]: {
+    character: Character.ASSASSIN,
+    action: ActionType.ASSASSINATE,
+    counterActions: []
+  },
+  [Character.CAPTAIN]: {
+    character: Character.CAPTAIN,
+    action: ActionType.STEAL,
+    counterActions: [CounterActionType.BLOCK_STEALING]
+  },
+  [Character.AMBASSADOR]: {
+    character: Character.AMBASSADOR,
+    action: ActionType.EXCHANGE,
+    counterActions: [CounterActionType.BLOCK_STEALING]
+  },
+  [Character.CONTESSA]: {
+    character: Character.CONTESSA,
+    action: undefined,  // Contessa has no action
+    counterActions: [CounterActionType.BLOCK_ASSASSINATION]
   }
+};
+
+// Action costs and effects
+export const ACTION_CONFIG = {
+  [ActionType.INCOME]: {
+    cost: 0,
+    gain: 1,
+    canBeBlocked: false,
+    canBeChallenged: false,
+    requiresTarget: false
+  },
+  [ActionType.FOREIGN_AID]: {
+    cost: 0,
+    gain: 2,
+    canBeBlocked: true,
+    canBeChallenged: false,
+    requiresTarget: false
+  },
+  [ActionType.COUP]: {
+    cost: 7,
+    gain: 0,
+    canBeBlocked: false,
+    canBeChallenged: false,
+    requiresTarget: true
+  },
+  [ActionType.TAX]: {
+    cost: 0,
+    gain: 3,
+    canBeBlocked: false,
+    canBeChallenged: true,
+    requiresTarget: false,
+    requiredCharacter: Character.DUKE
+  },
+  [ActionType.ASSASSINATE]: {
+    cost: 3,
+    gain: 0,
+    canBeBlocked: true,
+    canBeChallenged: true,
+    requiresTarget: true,
+    requiredCharacter: Character.ASSASSIN
+  },
+  [ActionType.STEAL]: {
+    cost: 0,
+    gain: 2,  // Takes from target
+    canBeBlocked: true,
+    canBeChallenged: true,
+    requiresTarget: true,
+    requiredCharacter: Character.CAPTAIN
+  },
+  [ActionType.EXCHANGE]: {
+    cost: 0,
+    gain: 0,
+    canBeBlocked: false,
+    canBeChallenged: true,
+    requiresTarget: false,
+    requiredCharacter: Character.AMBASSADOR
+  }
+};
+
+// Game constants
+export const GAME_CONSTANTS = {
+  MIN_PLAYERS: 2,
+  MAX_PLAYERS: 6,
+  STARTING_COINS: 2,
+  STARTING_INFLUENCES: 2,
+  CARDS_PER_CHARACTER: 3,
+  COUP_COST: 7,
+  ASSASSINATE_COST: 3,
+  MANDATORY_COUP_THRESHOLD: 10,
+  AMBASSADOR_DRAW_COUNT: 2,  // Ambassador draws 2, has 4 total
+  CHALLENGE_TIMER: 10,  // seconds
+  COUNTERACTION_TIMER: 10  // seconds
+};
+
+export type GameEvent = 
+  | { type: 'PLAYER_ACTION'; action: Action }
+  | { type: 'CHALLENGE'; challenge: Challenge }
+  | { type: 'COUNTERACTION'; counterAction: CounterAction }
+  | { type: 'REVEAL_CARD'; playerId: string; character: Character }
+  | { type: 'LOSE_INFLUENCE'; playerId: string; cardIndex: number }
+  | { type: 'DRAW_CARD'; playerId: string }
+  | { type: 'NEXT_TURN' }
+  | { type: 'GAME_OVER'; winnerId: string };
+
+// Legacy compatibility - map old CardType to new Character
+export enum CardType {
+  DUKE = 'DUKE',
+  CAPTAIN = 'CAPTAIN',
+  ASSASSIN = 'ASSASSIN',
+  AMBASSADOR = 'AMBASSADOR',
+  CONTESSA = 'CONTESSA',
 }
 
-// Card State
+// Legacy CardState interface for backward compatibility
 export interface CardState {
   type: CardType;
   revealed: boolean;
 }
 
-// Player State
-export interface Player {
-  id: string;
-  name: string;
-  coins: number;
-  cards: CardState[]; // 2 cards
-  isAlive: boolean;
-  isCurrentPlayer: boolean;
+// Helper function to convert CardType to Character
+export function cardTypeToCharacter(cardType: CardType): Character {
+  const mapping: Record<CardType, Character> = {
+    [CardType.DUKE]: Character.DUKE,
+    [CardType.CAPTAIN]: Character.CAPTAIN,
+    [CardType.ASSASSIN]: Character.ASSASSIN,
+    [CardType.AMBASSADOR]: Character.AMBASSADOR,
+    [CardType.CONTESSA]: Character.CONTESSA,
+  };
+  return mapping[cardType];
 }
 
-// Available Actions
-export enum ActionType {
-  // Basic
-  INCOME = 'INCOME',
-  FOREIGN_AID = 'FOREIGN_AID',
-  COUP = 'COUP',
-  // Character
-  DUKE_TAX = 'DUKE_TAX',
-  CAPTAIN_STEAL = 'CAPTAIN_STEAL',
-  ASSASSIN_KILL = 'ASSASSIN_KILL',
-  AMBASSADOR_EXCHANGE = 'AMBASSADOR_EXCHANGE',
+// Helper function to convert Character to CardType
+export function characterToCardType(character: Character): CardType {
+  const mapping: Record<Character, CardType> = {
+    [Character.DUKE]: CardType.DUKE,
+    [Character.CAPTAIN]: CardType.CAPTAIN,
+    [Character.ASSASSIN]: CardType.ASSASSIN,
+    [Character.AMBASSADOR]: CardType.AMBASSADOR,
+    [Character.CONTESSA]: CardType.CONTESSA,
+  };
+  return mapping[character];
 }
-
-// Game Phase
-export enum GamePhase {
-  SETUP = 'SETUP',
-  ACTION_SELECTION = 'ACTION_SELECTION',
-  WAITING_CHALLENGE = 'WAITING_CHALLENGE',
-  WAITING_BLOCK = 'WAITING_BLOCK',
-  RESOLVING_ACTION = 'RESOLVING_ACTION',
-  CARD_LOSS_SELECTION = 'CARD_LOSS_SELECTION',
-  GAME_OVER = 'GAME_OVER',
-}
-
-// Pending Action (for challenging or blocking)
-export interface PendingAction {
-  type: ActionType;
-  playerId: string;
-  targetPlayerId?: string;
-  canBeBlocked: boolean;
-  canBeChallenged: boolean;
-  blockingCards?: CardType[];
-}
-
-// Game State
-export interface GameState {
-  players: Player[];
-  currentPlayerIndex: number;
-  deck: CardType[];
-  gamePhase: GamePhase;
-  pendingAction: PendingAction | null;
-  winner: Player | null;
-  gameLog: string[];
-}
-
-// Action Rules
-export interface ActionRule {
-  cost: number;
-  canBeBlocked: boolean;
-  blockingCards?: CardType[];
-  canBeChallenged: boolean;
-  requiredCard?: CardType;
-  requiresTarget: boolean;
-}
-

@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { COLORS } from '../constants/colors';
 import { CARD_DIMENSIONS } from '../constants/dimensions';
 import { TYPOGRAPHY } from '../constants/typography';
 import { CARDS_DATA } from '../constants/cards';
-import { CardType } from '../types';
-import { getCardName, getCardColor, getCardImage } from '../utils/cardTranslations';
+import { CardType, Character } from '../types';
+import { cardTypeToCharacter } from '../types';
+import { getCardColor, getCardImage } from '../utils/cardTranslations';
+import { getCharacterName } from '../i18n';
 
 interface CardProps {
   character: CardType;
@@ -38,12 +41,14 @@ export default function Card({
   onPress,
   showImage = true,
 }: CardProps) {
+  const { t } = useTranslation();
   const [flipAnimation] = useState(new Animated.Value(revealed ? 1 : 0));
   const characterKey = CHARACTER_MAP[character];
   const cardData = CARDS_DATA[characterKey];
   const cardImage = getCardImage(character);
   const cardColor = getCardColor(character);
-  const cardName = getCardName(character);
+  const characterEnum = cardTypeToCharacter(character);
+  const cardName = getCharacterName(characterEnum);
   const dimensions = SIZE_MAP[size];
 
   React.useEffect(() => {
@@ -121,7 +126,9 @@ export default function Card({
       ) : (
         <View style={styles.cardBack}>
           <Text style={styles.cardBackText}>🎴</Text>
-          <Text style={styles.cardBackSubtext}>Carta Ocultada</Text>
+          <Text style={styles.cardBackSubtext}>
+            {t('game.hiddenCard', { defaultValue: 'Carta Ocultada' })}
+          </Text>
         </View>
       )}
     </View>

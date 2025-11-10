@@ -1,8 +1,11 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Modal, Card, Text, Button } from 'react-native-paper';
-import { Player, CardType } from '../types';
-import { getCardName, getCardColor } from '../utils/cardTranslations';
+import { useTranslation } from 'react-i18next';
+import { Player, Character } from '../types';
+import { characterToCardType } from '../types';
+import { getCardColor } from '../utils/cardTranslations';
+import { getCharacterName } from '../i18n';
 import { COLORS } from '../constants/colors';
 
 interface CardSelectionModalProps {
@@ -16,13 +19,15 @@ export default function CardSelectionModal({
   player,
   onSelectCard,
 }: CardSelectionModalProps) {
+  const { t } = useTranslation();
+  
   if (!player) {
     return null;
   }
 
-  const aliveCards = player.cards
+  const aliveCards = (player.influences || [])
     .map((card, index) => ({ card, index }))
-    .filter(({ card }) => !card.revealed);
+    .filter(({ card }) => !card.isRevealed);
 
 
   return (
@@ -33,10 +38,10 @@ export default function CardSelectionModal({
       <Card style={styles.card}>
         <Card.Content>
           <Text variant="headlineSmall" style={styles.title}>
-            Selecione uma Carta para Perder
+            {t('game.selectCardToLose')}
           </Text>
           <Text variant="bodyMedium" style={styles.subtitle}>
-            {player.name}, escolha qual carta revelar:
+            {player.name}, {t('game.chooseCardToReveal', { defaultValue: 'escolha qual carta revelar' })}:
           </Text>
 
           <View style={styles.cardsContainer}>
@@ -47,11 +52,11 @@ export default function CardSelectionModal({
                 onPress={() => onSelectCard(index)}
                 style={[
                   styles.cardButton,
-                  { backgroundColor: getCardColor(card.type) },
+                  { backgroundColor: getCardColor(characterToCardType(card.character)) },
                 ]}
                 contentStyle={styles.cardButtonContent}
               >
-                {getCardName(card.type)}
+                {getCharacterName(card.character)}
               </Button>
             ))}
           </View>
