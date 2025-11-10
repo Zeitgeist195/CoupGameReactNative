@@ -7,15 +7,15 @@ import { CARD_IMAGES } from '../assets/cards';
 export function getCardName(cardType: CardType): string {
   switch (cardType) {
     case CardType.DUKE:
-      return 'CONDE';
+      return 'DUQUE';
     case CardType.CAPTAIN:
-      return 'PIRATA';
+      return 'CAPITÃO';
     case CardType.ASSASSIN:
-      return 'MERCENÁRIO';
+      return 'ASSASSINO';
     case CardType.AMBASSADOR:
-      return 'DIPLOMATA';
+      return 'EMBAIXADOR';
     case CardType.CONTESSA:
-      return 'CORTESÃ';
+      return 'CONDESSA';
     default:
       return cardType;
   }
@@ -27,13 +27,13 @@ export function getCardName(cardType: CardType): string {
 export function getActionName(actionType: ActionType): string {
   switch (actionType) {
     case ActionType.TAX:
-      return 'Taxar (Conde)';
+      return 'Taxar (Duque)';
     case ActionType.STEAL:
-      return 'Roubar (Pirata)';
+      return 'Roubar (Capitão)';
     case ActionType.ASSASSINATE:
-      return 'Assassinar (Mercenário)';
+      return 'Assassinar (Assassino)';
     case ActionType.EXCHANGE:
-      return 'Trocar (Diplomata)';
+      return 'Trocar (Embaixador)';
     case ActionType.INCOME:
       return 'Renda';
     case ActionType.FOREIGN_AID:

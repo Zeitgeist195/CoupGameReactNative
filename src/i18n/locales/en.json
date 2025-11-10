@@ -1,10 +1,10 @@
 {
   "characters": {
-    "duke": "Count",
-    "assassin": "Mercenary",
-    "captain": "Pirate",
-    "ambassador": "Diplomat",
-    "contessa": "Courtesan"
+    "duke": "Duke",
+    "assassin": "Assassin",
+    "captain": "Captain",
+    "ambassador": "Ambassador",
+    "contessa": "Contessa"
   },
   "actions": {
     "income": "Income",
@@ -30,7 +30,7 @@
     "ambassador_counter": "Block stealing attempts",
     "contessa_counter": "Block assassination attempts",
     "income_action": "Take 1 coin. Cannot be blocked or challenged.",
-    "foreign_aid_action": "Take 2 coins. Can be blocked by the Count.",
+    "foreign_aid_action": "Take 2 coins. Can be blocked by the Duke.",
     "coup_action": "Pay 7 coins to eliminate a player. Cannot be blocked or challenged.",
     "tax_action": "Take 3 coins. Can be challenged.",
     "steal_action": "Steal 2 coins from another player. Can be blocked or challenged.",
@@ -66,6 +66,7 @@
     "newGame": "New Game",
     "backToMenu": "Back to Menu",
     "addPlayersToStart": "Add 2-6 players to start",
+    "language": "Language",
     "players": "Players",
     "player": "Player",
     "gameLog": "Game Log",
@@ -73,10 +74,11 @@
     "cannotSeeCard": "You cannot see this card",
     "remaining": "remaining",
     "thisAction": "this action",
+    "theBlock": "the block",
     "chooseCardToReveal": "choose which card to reveal",
     "ambassadorExchange": "Ambassador Exchange",
-    "select2Of4": "Choose 2 of the 4 cards to keep",
-    "selectedCount": "Selected: {{count}}/2",
+    "selectCards": "Choose {{count}} card(s) from {{total}} to keep",
+    "selectedCount": "Selected: {{count}}/{{total}}",
     "inProgress": "Game in Progress",
     "noCurrentPlayer": "No current player",
     "cards": "cards"
@@ -101,6 +103,9 @@
     "coins_stolen": "{{playerName}} steals {{coins}} coins from {{targetName}}",
     "coins_paid": "{{playerName}} pays {{coins}} coins",
     "influence_lost": "{{playerName}} loses influence: {{character}}",
+    "auto_influence_lost_coup": "{{playerName}} loses {{character}} automatically (Coup)",
+    "auto_influence_lost_assassination": "{{playerName}} loses {{character}} automatically (Assassination)",
+    "auto_influence_lost_challenge": "{{playerName}} loses {{character}} automatically (Challenge)",
     "card_revealed": "{{playerName}} reveals {{character}}",
     "player_eliminated": "{{playerName}} has been eliminated!",
     "ambassador_exchange": "{{playerName}} exchanges cards with the deck",
@@ -118,13 +123,56 @@
     "maxPlayers": "Maximum of 6 players allowed",
     "uniqueNames": "Player names must be unique"
   },
-  "buttons": {
-    "yes": "Yes",
-    "no": "No",
-    "ok": "OK",
-    "cancel": "Cancel",
-    "confirm": "Confirm"
-  },
+    "buttons": {
+      "yes": "Yes",
+      "no": "No",
+      "ok": "OK",
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "continue": "Continue"
+    },
+    "challenge": {
+      "failed": {
+        "title": "Challenge Failed!",
+        "message": "{{defenderName}} revealed {{character}}! {{challengerName}} lost the challenge and must lose an influence."
+      },
+      "succeeded": {
+        "title": "Challenge Succeeded!",
+        "message": "{{defenderName}} didn't have {{character}}! {{defenderName}} must lose an influence."
+      },
+      "loseInfluence": {
+        "title": "Lose Influence",
+        "message": "{{playerName}} must choose a card to reveal"
+      },
+      "newCard": {
+        "title": "New Card",
+        "message": "{{playerName}} returns the revealed card to the deck and draws a new one"
+      }
+    },
+    "action": {
+      "continues": {
+        "title": "Action Continues",
+        "message": "{{playerName}} proceeds with {{action}}"
+      },
+      "failed": {
+        "title": "Action Failed",
+        "message": "{{playerName}}'s action was blocked by the successful challenge"
+      }
+    },
+    "narrative": {
+      "coup": {
+        "title": "Coup d'État!",
+        "message": "{{playerName}} had only one card and automatically lost {{character}}."
+      },
+      "assassination": {
+        "title": "Assassination!",
+        "message": "{{playerName}} had only one card and automatically lost {{character}}."
+      },
+      "challenge": {
+        "title": "Influence Lost!",
+        "message": "{{playerName}} had only one card and automatically lost {{character}}."
+      }
+    },
   "rules": {
     "title": "How to Play",
     "objective": "Be the last player with influence remaining",

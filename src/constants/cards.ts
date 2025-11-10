@@ -2,7 +2,7 @@ import { COLORS } from './colors';
 
 export const CARDS_DATA = {
   conde: {
-    name: 'CONDE',
+    name: 'DUQUE',
     color: COLORS.conde,
     abilities: [
       { name: '💰 TAXAR', description: 'Receba 3 moedas' },
@@ -10,7 +10,7 @@ export const CARDS_DATA = {
     ]
   },
   pirata: {
-    name: 'PIRATA',
+    name: 'CAPITÃO',
     color: COLORS.pirata,
     abilities: [
       { name: '💎 ROUBAR', description: 'Roube 2 moedas de outro jogador' },
@@ -18,7 +18,7 @@ export const CARDS_DATA = {
     ]
   },
   cortesa: {
-    name: 'CORTESÃ',
+    name: 'CONDESSA',
     color: COLORS.cortesa,
     abilities: [
       { name: '🛡️ BLOQUEAR', description: 'Bloqueie tentativas de assassinato' },
@@ -26,15 +26,15 @@ export const CARDS_DATA = {
     ]
   },
   mercenario: {
-    name: 'MERCENÁRIO',
+    name: 'ASSASSINO',
     color: COLORS.mercenario,
     abilities: [
       { name: '🗡️ ASSASSINAR', description: 'Pague 3 moedas para eliminar um jogador' },
-      { name: '⚔️ LETAL', description: 'Pode ser bloqueado pela Cortesã' }
+      { name: '⚔️ LETAL', description: 'Pode ser bloqueado pela Condessa' }
     ]
   },
   diplomata: {
-    name: 'DIPLOMATA',
+    name: 'EMBAIXADOR',
     color: COLORS.diplomata,
     abilities: [
       { name: '🔄 TROCAR', description: 'Troque cartas com o baralho' },

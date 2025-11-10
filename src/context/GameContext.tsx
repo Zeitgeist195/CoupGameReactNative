@@ -17,6 +17,7 @@ type GameAction =
   | { type: 'SKIP_BLOCK' }
   | { type: 'SELECT_CARD_TO_LOSE'; payload: { playerId: string; cardIndex: number } }
   | { type: 'COMPLETE_EXCHANGE'; payload: { playerId: string; cardIndices: number[] } }
+  | { type: 'ADVANCE_FROM_NARRATIVE' }
   | { type: 'RESET_GAME' };
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -61,7 +62,10 @@ function gameReducer(state: GameState | null, action: GameAction): GameState {
         game = new CoupGame(state.players.map(p => p.name));
         (game as any).state = { ...state };
         
-        game.challenge(action.payload, true);
+        // Determine if this is a challenge to action or counteraction
+        const isForAction = state.phase.type !== 'challenge_counteraction';
+        
+        game.challenge(action.payload, isForAction);
         return game.getState();
       }
 
@@ -129,6 +133,17 @@ function gameReducer(state: GameState | null, action: GameAction): GameState {
         return game.getState();
       }
 
+      case 'ADVANCE_FROM_NARRATIVE': {
+        if (!state) {
+          throw new Error('Game not initialized');
+        }
+        game = new CoupGame(state.players.map(p => p.name));
+        (game as any).state = { ...state };
+        
+        game.advanceFromNarrative();
+        return game.getState();
+      }
+
       case 'RESET_GAME':
         // Return null state - will be initialized by INIT_GAME
         return null as any;
@@ -145,12 +160,12 @@ function gameReducer(state: GameState | null, action: GameAction): GameState {
 }
 
 export function GameProvider({ children }: { children: ReactNode }) {
-  const initialState = new CoupGame(['Player 1', 'Player 2']).getState();
-  const [gameState, dispatch] = useReducer(gameReducer, initialState);
+  const [gameState, dispatch] = useReducer(gameReducer, null);
   
   // Create game instance that stays in sync with state
   const game = React.useMemo(() => {
     if (!gameState || !gameState.players || gameState.players.length === 0) {
+      // Return a dummy game instance when state is null (for setup screen)
       return new CoupGame(['Player 1', 'Player 2']);
     }
     const gameInstance = new CoupGame(gameState.players.map(p => p.name));
@@ -159,8 +174,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return gameInstance;
   }, [gameState]);
 
+  // Provide null-safe gameState and game
+  const safeGameState = gameState || null;
+  const safeGame = game || new CoupGame(['Player 1', 'Player 2']);
+
   return (
-    <GameContext.Provider value={{ gameState, game, dispatch }}>
+    <GameContext.Provider value={{ gameState: safeGameState, game: safeGame, dispatch }}>
       {children}
     </GameContext.Provider>
   );

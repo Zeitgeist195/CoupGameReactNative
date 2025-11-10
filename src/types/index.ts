@@ -62,7 +62,7 @@ export interface Challenge {
 }
 
 export interface GamePhase {
-  type: 'action' | 'challenge' | 'counteraction' | 'challenge_counteraction' | 'resolution' | 'card_selection';
+  type: 'action' | 'challenge' | 'counteraction' | 'challenge_counteraction' | 'resolution' | 'card_selection' | 'narrative';
   description: string;
 }
 

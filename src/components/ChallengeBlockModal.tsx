@@ -72,12 +72,40 @@ export default function ChallengeBlockModal({
   }
 
   const actionPlayer = allPlayers.find((p) => p.id === pendingAction?.action?.actorId);
-  const canChallengePlayers = allPlayers.filter(
+  
+  // For challenging the ACTION (not the block)
+  const canChallengeActionPlayers = allPlayers.filter(
     (p) => p.id !== pendingAction?.action?.actorId && !p.isEliminated
   );
-  const canBlockPlayers = allPlayers.filter(
-    (p) => p.id !== pendingAction?.action?.targetId && !p.isEliminated
+  
+  // For challenging the BLOCK (counteraction)
+  const canChallengeBlockPlayers = allPlayers.filter(
+    (p) => p.id !== pendingAction?.counterAction?.actorId && !p.isEliminated
   );
+  
+  // Determine who can block based on action type
+  const canBlockPlayers = (() => {
+    if (!pendingAction?.action) return [];
+    const actionType = pendingAction.action.type;
+    
+    // For FOREIGN_AID, anyone except the actor can block
+    if (actionType === ActionType.FOREIGN_AID) {
+      return allPlayers.filter(
+        (p) => p.id !== pendingAction.action.actorId && !p.isEliminated
+      );
+    }
+    
+    // For STEAL and ASSASSINATE, only the target can block
+    if (actionType === ActionType.STEAL || actionType === ActionType.ASSASSINATE) {
+      const targetId = pendingAction.action.targetId;
+      if (!targetId) return [];
+      return allPlayers.filter(
+        (p) => p.id === targetId && !p.isEliminated
+      );
+    }
+    
+    return [];
+  })();
 
   const getActionLabel = (actionType: string): string => {
     try {
@@ -144,7 +172,7 @@ export default function ChallengeBlockModal({
               <Text variant="titleMedium" style={styles.sectionTitle}>
                 {t('game.challenge')} {t('game.thisAction', { defaultValue: 'esta ação' })}?
               </Text>
-              {canChallengePlayers.map((player) => (
+              {canChallengeActionPlayers.map((player) => (
                 <Button
                   key={player.id}
                   mode="contained"
@@ -157,7 +185,7 @@ export default function ChallengeBlockModal({
             </View>
           )}
 
-          {(gamePhase === 'counteraction' || gamePhase === 'challenge_counteraction') && (
+          {gamePhase === 'counteraction' && (
             <View style={styles.actionsContainer}>
               <Text variant="titleMedium" style={styles.sectionTitle}>
                 {t('game.block')} {t('game.thisAction', { defaultValue: 'esta ação' })}?
@@ -192,6 +220,24 @@ export default function ChallengeBlockModal({
                   style={styles.actionButton}
                 >
                   {player.name} Bloqueia
+                </Button>
+              ))}
+            </View>
+          )}
+
+          {gamePhase === 'challenge_counteraction' && (
+            <View style={styles.actionsContainer}>
+              <Text variant="titleMedium" style={styles.sectionTitle}>
+                {t('game.challenge')} {t('game.theBlock', { defaultValue: 'o bloqueio' })}?
+              </Text>
+              {canChallengeBlockPlayers.map((player) => (
+                <Button
+                  key={player.id}
+                  mode="contained"
+                  onPress={() => onChallenge(player.id)}
+                  style={styles.actionButton}
+                >
+                  {player.name} Desafia
                 </Button>
               ))}
             </View>

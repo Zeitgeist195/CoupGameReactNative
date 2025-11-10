@@ -8,15 +8,17 @@ import { COLORS } from '../constants/colors';
 export default function GameOverScreen({ navigation }: any) {
   const { t } = useTranslation();
   const { gameState, dispatch } = useGame();
-  const winner = gameState.winnerId 
-    ? gameState.players.find(p => p.id === gameState.winnerId)
-    : null;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.5)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
+  
+  // Note: Navigation is handled by button handlers, not by useEffect
+  // This prevents conflicts with navigation.reset()
 
   useEffect(() => {
-    // Animação de entrada
+    // Animação de entrada (only if gameState exists)
+    if (!gameState) return;
+    
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -35,7 +37,16 @@ export default function GameOverScreen({ navigation }: any) {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [gameState]);
+
+  // Early return if gameState is null (must be after all hooks)
+  if (!gameState) {
+    return null;
+  }
+
+  const winner = gameState?.winnerId 
+    ? gameState.players.find(p => p.id === gameState.winnerId)
+    : null;
 
   const handleNewGame = () => {
     Animated.parallel([
@@ -50,8 +61,15 @@ export default function GameOverScreen({ navigation }: any) {
         useNativeDriver: true,
       }),
     ]).start(() => {
+      // Reset game first, then navigate
       dispatch({ type: 'RESET_GAME' });
-      navigation.navigate('Setup');
+      // Use setTimeout to ensure state is reset before navigation
+      setTimeout(() => {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Setup' }],
+        });
+      }, 100);
     });
   };
 
@@ -68,8 +86,15 @@ export default function GameOverScreen({ navigation }: any) {
         useNativeDriver: true,
       }),
     ]).start(() => {
+      // Reset game first, then navigate
       dispatch({ type: 'RESET_GAME' });
-      navigation.navigate('Setup');
+      // Use setTimeout to ensure state is reset before navigation
+      setTimeout(() => {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Setup' }],
+        });
+      }, 100);
     });
   };
 
@@ -129,7 +154,7 @@ export default function GameOverScreen({ navigation }: any) {
               <Text variant="titleMedium" style={styles.playersTitle}>
                 📊 {t('game.finalRanking', { defaultValue: 'Classificação Final' })}
               </Text>
-              {gameState.players
+              {(gameState?.players || [])
                 .sort((a, b) => {
                   if (!a.isEliminated && b.isEliminated) return -1;
                   if (a.isEliminated && !b.isEliminated) return 1;

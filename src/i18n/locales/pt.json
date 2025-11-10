@@ -1,10 +1,10 @@
 {
   "characters": {
-    "duke": "Conde",
-    "assassin": "Mercenário",
-    "captain": "Pirata",
-    "ambassador": "Diplomata",
-    "contessa": "Cortesã"
+    "duke": "Duque",
+    "assassin": "Assassino",
+    "captain": "Capitão",
+    "ambassador": "Embaixador",
+    "contessa": "Condessa"
   },
   "actions": {
     "income": "Renda",
@@ -30,7 +30,7 @@
     "ambassador_counter": "Bloqueie tentativas de roubo",
     "contessa_counter": "Bloqueie tentativas de assassinato",
     "income_action": "Receba 1 moeda. Não pode ser bloqueado ou desafiado.",
-    "foreign_aid_action": "Receba 2 moedas. Pode ser bloqueado pelo Conde.",
+    "foreign_aid_action": "Receba 2 moedas. Pode ser bloqueado pelo Duque.",
     "coup_action": "Pague 7 moedas para eliminar um jogador. Não pode ser bloqueado ou desafiado.",
     "tax_action": "Receba 3 moedas. Pode ser desafiado.",
     "steal_action": "Roube 2 moedas de outro jogador. Pode ser bloqueado ou desafiado.",
@@ -66,6 +66,7 @@
     "newGame": "Novo Jogo",
     "backToMenu": "Voltar ao Menu",
     "addPlayersToStart": "Adicione 2-6 jogadores para começar",
+    "language": "Idioma",
     "players": "Jogadores",
     "player": "Jogador",
     "gameLog": "Histórico do Jogo",
@@ -73,10 +74,11 @@
     "cannotSeeCard": "Você não pode ver esta carta",
     "remaining": "restantes",
     "thisAction": "esta ação",
+    "theBlock": "o bloqueio",
     "chooseCardToReveal": "escolha qual carta revelar",
-    "ambassadorExchange": "Troca do Diplomata",
-    "select2Of4": "Escolha 2 das 4 cartas para manter",
-    "selectedCount": "Selecionadas: {{count}}/2",
+    "ambassadorExchange": "Troca do Embaixador",
+    "selectCards": "Escolha {{count}} carta(s) das {{total}} para manter",
+    "selectedCount": "Selecionadas: {{count}}/{{total}}",
     "inProgress": "Jogo em Andamento",
     "noCurrentPlayer": "No current player",
     "cards": "cartas"
@@ -101,6 +103,9 @@
     "coins_stolen": "{{playerName}} rouba {{coins}} moedas de {{targetName}}",
     "coins_paid": "{{playerName}} paga {{coins}} moedas",
     "influence_lost": "{{playerName}} perde influência: {{character}}",
+    "auto_influence_lost_coup": "{{playerName}} perde {{character}} automaticamente (Golpe de Estado)",
+    "auto_influence_lost_assassination": "{{playerName}} perde {{character}} automaticamente (Assassinato)",
+    "auto_influence_lost_challenge": "{{playerName}} perde {{character}} automaticamente (Desafio)",
     "card_revealed": "{{playerName}} revela {{character}}",
     "player_eliminated": "{{playerName}} foi eliminado!",
     "ambassador_exchange": "{{playerName}} troca cartas com o baralho",
@@ -123,7 +128,50 @@
     "no": "Não",
     "ok": "OK",
     "cancel": "Cancelar",
-    "confirm": "Confirmar"
+    "confirm": "Confirmar",
+    "continue": "Continuar"
+  },
+  "challenge": {
+    "failed": {
+      "title": "Desafio Falhou!",
+      "message": "{{defenderName}} revelou {{character}}! {{challengerName}} perdeu o desafio e deve perder uma influência."
+    },
+    "succeeded": {
+      "title": "Desafio Bem-Sucedido!",
+      "message": "{{defenderName}} não tinha {{character}}! {{defenderName}} deve perder uma influência."
+    },
+    "loseInfluence": {
+      "title": "Perder Influência",
+      "message": "{{playerName}} deve escolher uma carta para revelar"
+    },
+    "newCard": {
+      "title": "Nova Carta",
+      "message": "{{playerName}} devolve a carta revelada ao deck e pega uma nova"
+    }
+  },
+  "action": {
+    "continues": {
+      "title": "Ação Prossegue",
+      "message": "{{playerName}} prossegue com {{action}}"
+    },
+    "failed": {
+      "title": "Ação Falhou",
+      "message": "A ação de {{playerName}} foi bloqueada pelo desafio bem-sucedido"
+    }
+  },
+  "narrative": {
+    "coup": {
+      "title": "Golpe de Estado!",
+      "message": "{{playerName}} tinha apenas uma carta e perdeu {{character}} automaticamente."
+    },
+    "assassination": {
+      "title": "Assassinato!",
+      "message": "{{playerName}} tinha apenas uma carta e perdeu {{character}} automaticamente."
+    },
+    "challenge": {
+      "title": "Perda de Influência!",
+      "message": "{{playerName}} tinha apenas uma carta e perdeu {{character}} automaticamente."
+    }
   },
   "rules": {
     "title": "Como Jogar",

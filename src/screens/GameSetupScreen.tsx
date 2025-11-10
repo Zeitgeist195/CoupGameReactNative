@@ -13,6 +13,7 @@ import { useGame } from '../context/GameContext';
 import { COLORS } from '../constants/colors';
 import CardComponent from '../components/Card';
 import { CardType } from '../types';
+import i18n from '../i18n';
 
 export default function GameSetupScreen({ navigation }: any) {
   const { t } = useTranslation();
@@ -20,6 +21,7 @@ export default function GameSetupScreen({ navigation }: any) {
   const [playerNames, setPlayerNames] = useState<string[]>(['', '']);
   const [errors, setErrors] = useState<string[]>([]);
   const [fadeAnim] = useState(new Animated.Value(0));
+  const [currentLanguage, setCurrentLanguage] = useState(i18n.language);
 
   React.useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -27,7 +29,15 @@ export default function GameSetupScreen({ navigation }: any) {
       duration: 500,
       useNativeDriver: true,
     }).start();
+    
+    // Sync current language with i18n
+    setCurrentLanguage(i18n.language);
   }, []);
+
+  const changeLanguage = (lang: 'pt' | 'en') => {
+    i18n.changeLanguage(lang);
+    setCurrentLanguage(lang);
+  };
 
   const addPlayer = () => {
     if (playerNames.length < 6) {
@@ -109,6 +119,35 @@ export default function GameSetupScreen({ navigation }: any) {
               {t('game.addPlayersToStart', { defaultValue: 'Adicione 2-6 jogadores para começar' })}
             </Text>
           </View>
+
+          {/* Language Selector */}
+          <PaperCard style={styles.languageCard}>
+            <PaperCard.Content>
+              <Text variant="titleSmall" style={styles.languageLabel}>
+                🌐 {t('game.language', { defaultValue: 'Idioma' })}
+              </Text>
+              <View style={styles.languageButtons}>
+                <Button
+                  mode={currentLanguage === 'pt' ? 'contained' : 'outlined'}
+                  onPress={() => changeLanguage('pt')}
+                  style={styles.languageButton}
+                  buttonColor={currentLanguage === 'pt' ? COLORS.buttonPrimary : undefined}
+                  textColor={currentLanguage === 'pt' ? COLORS.background : COLORS.textPrimary}
+                >
+                  🇧🇷 Português
+                </Button>
+                <Button
+                  mode={currentLanguage === 'en' ? 'contained' : 'outlined'}
+                  onPress={() => changeLanguage('en')}
+                  style={styles.languageButton}
+                  buttonColor={currentLanguage === 'en' ? COLORS.buttonPrimary : undefined}
+                  textColor={currentLanguage === 'en' ? COLORS.background : COLORS.textPrimary}
+                >
+                  🇺🇸 English
+                </Button>
+              </View>
+            </PaperCard.Content>
+          </PaperCard>
 
           {/* Preview das Cartas */}
           <View style={styles.cardsPreview}>
@@ -253,6 +292,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: COLORS.textSecondary,
     fontSize: 16,
+  },
+  languageCard: {
+    marginBottom: 20,
+    backgroundColor: COLORS.cardBackground,
+    borderColor: COLORS.buttonSecondary + '40',
+    borderWidth: 1,
+  },
+  languageLabel: {
+    color: COLORS.textPrimary,
+    marginBottom: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  languageButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'center',
+  },
+  languageButton: {
+    flex: 1,
+    borderRadius: 8,
   },
   cardsPreview: {
     marginBottom: 30,

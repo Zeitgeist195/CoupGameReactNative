@@ -315,10 +315,10 @@ export class CoupGame {
     // 2. Return revealed card to deck and draw new one
     this.returnCardAndDrawNew(defender, defenderCard);
 
-    // 3. Challenger loses 1 influence (must choose which card)
+    // 3. Wait for narrative modal to be dismissed before showing card selection
     this.state.phase = {
-      type: 'card_selection',
-      description: `${challenger.name} must lose an influence`
+      type: 'narrative',
+      description: 'Challenge failed - waiting for narrative modal'
     };
     
     // Store who needs to lose influence
@@ -328,7 +328,7 @@ export class CoupGame {
       isForAction
     };
 
-    // After challenger loses influence, original action will continue in loseInfluence()
+    // After narrative modal is dismissed, will transition to card_selection
   }
 
   /**
@@ -352,10 +352,10 @@ export class CoupGame {
       }
     });
 
-    // Defender loses 1 influence
+    // Wait for narrative modal to be dismissed before showing card selection
     this.state.phase = {
-      type: 'card_selection',
-      description: `${defender.name} must lose an influence`
+      type: 'narrative',
+      description: 'Challenge succeeded - waiting for narrative modal'
     };
 
     // ACTION FAILS - will not be executed
@@ -364,6 +364,134 @@ export class CoupGame {
       targetId: defender.id,
       isForAction
     };
+  }
+
+  /**
+   * Advance from narrative phase to card selection phase
+   * Called after narrative modal is dismissed
+   */
+  public advanceFromNarrative(): void {
+    if (this.state.phase.type !== 'narrative') {
+      throw new Error('Not in narrative phase');
+    }
+
+    if (!this.state.pendingAction?.challenge) {
+      throw new Error('No challenge pending');
+    }
+
+    const challenge = this.state.pendingAction.challenge;
+    
+    // Determine who should lose influence based on challenge outcome
+    const isFailedChallenge = this.state.phase.description.includes('failed');
+    const playerIdToLose = isFailedChallenge ? challenge.challengerId : challenge.targetId;
+    const player = this.getPlayerById(playerIdToLose);
+
+    if (!player) {
+      throw new Error('Player not found');
+    }
+
+    // Check if player has only 1 unrevealed card - auto-lose it
+    const unrevealedCards = player.influences.filter(c => !c.isRevealed);
+    if (unrevealedCards.length === 1) {
+      // Auto-lose the only card
+      this.autoLoseInfluence(player, 'challenge');
+      return;
+    }
+
+    // Transition to card selection phase
+    this.state.phase = {
+      type: 'card_selection',
+      description: `${player.name} must lose an influence`
+    };
+  }
+
+  /**
+   * Automatically lose influence when player has only 1 card
+   * @param player - Player who loses influence
+   * @param reason - Reason for losing: 'coup', 'assassination', or 'challenge'
+   */
+  private autoLoseInfluence(player: Player, reason: 'coup' | 'assassination' | 'challenge'): void {
+    // Find the only unrevealed card
+    const unrevealedCard = player.influences.find(c => !c.isRevealed);
+    if (!unrevealedCard) {
+      throw new Error('Player should have at least one unrevealed card');
+    }
+
+    // Reveal the card
+    unrevealedCard.isRevealed = true;
+
+    // Add log with special translation key for narrative modal
+    let translationKey = 'log.auto_influence_lost';
+    let translationParams: Record<string, any> = {
+      playerName: player.name,
+      character: unrevealedCard.character
+    };
+
+    if (reason === 'coup') {
+      translationKey = 'log.auto_influence_lost_coup';
+    } else if (reason === 'assassination') {
+      translationKey = 'log.auto_influence_lost_assassination';
+    } else if (reason === 'challenge') {
+      translationKey = 'log.auto_influence_lost_challenge';
+    }
+
+    this.addLog({
+      type: 'resolution',
+      message: `${player.name} automatically loses influence: ${unrevealedCard.character}`,
+      playerId: player.id,
+      translationKey,
+      translationParams
+    });
+
+    // Check if player is eliminated
+    const allRevealed = player.influences.every(c => c.isRevealed);
+    if (allRevealed) {
+      player.isEliminated = true;
+      this.addLog({
+        type: 'elimination',
+        message: `${player.name} has been eliminated!`,
+        playerId: player.id,
+        translationKey: 'log.player_eliminated',
+        translationParams: { playerName: player.name }
+      });
+
+      // Check for game over
+      this.checkGameOver();
+    }
+
+    // Handle post-influence-loss logic based on pending action
+    if (this.state.pendingAction?.challenge) {
+      const challenge = this.state.pendingAction.challenge;
+      
+      if (player.id === challenge.challengerId) {
+        // Challenger lost influence (failed challenge)
+        if (challenge.isForAction) {
+          this.state.pendingAction.challenge = undefined;
+          this.resolveAction();
+        } else {
+          this.state.pendingAction = null;
+          this.nextTurn();
+        }
+      } else if (player.id === challenge.targetId) {
+        // Defender lost influence (successful challenge)
+        if (challenge.isForAction) {
+          this.state.pendingAction = null;
+          this.nextTurn();
+        } else {
+          this.state.pendingAction.counterAction = undefined;
+          this.state.pendingAction.challenge = undefined;
+          this.resolveAction();
+        }
+      }
+    } else if (this.state.pendingAction?.action.type === ActionType.ASSASSINATE || 
+               this.state.pendingAction?.action.type === ActionType.COUP) {
+      // Action already executed, just need to advance turn
+      this.state.pendingAction = null;
+      this.nextTurn();
+    } else {
+      // Other actions that might need resolution
+      this.resolveAction();
+    }
   }
 
   /**
@@ -423,6 +551,9 @@ export class CoupGame {
         if (challenge.isForAction) {
           // Failed challenge to action: defender already revealed card and drew new one
           // Now continue with original action resolution
+          // BUT: Only if the action wasn't already executed
+          // Clear challenge info before resolving
+          this.state.pendingAction.challenge = undefined;
           this.resolveAction();
         } else {
           // Failed challenge to counteraction: counteraction succeeds, action is blocked
@@ -434,18 +565,29 @@ export class CoupGame {
         if (challenge.isForAction) {
           // Successful challenge to action: action FAILS
           // Coins paid are NOT refunded (already paid in performAction)
+          // IMPORTANT: Action should NOT execute - it was successfully challenged
           this.state.pendingAction = null;
           this.nextTurn();
         } else {
           // Successful challenge to counteraction: counteraction fails, action SUCCEEDS
           // Remove the counteraction so action can proceed
           this.state.pendingAction.counterAction = undefined;
+          this.state.pendingAction.challenge = undefined;
           this.resolveAction();
         }
       }
     } else {
       // Normal influence loss from assassination or coup
-      this.resolveAction();
+      // Check if this is from an action that requires target to lose influence
+      if (this.state.pendingAction?.action.type === ActionType.ASSASSINATE || 
+          this.state.pendingAction?.action.type === ActionType.COUP) {
+        // Action already executed, just need to advance turn
+        this.state.pendingAction = null;
+        this.nextTurn();
+      } else {
+        // Other actions that might need resolution
+        this.resolveAction();
+      }
     }
   }
 
@@ -627,7 +769,20 @@ export class CoupGame {
    * Execute Coup action
    */
   private executeCoup(actor: Player, targetId: string): void {
-    // Target must lose an influence
+    const target = this.getPlayerById(targetId);
+    if (!target) {
+      return;
+    }
+
+    // Check if target has only 1 unrevealed card - auto-lose it
+    const unrevealedCards = target.influences.filter(c => !c.isRevealed);
+    if (unrevealedCards.length === 1) {
+      // Auto-lose the only card
+      this.autoLoseInfluence(target, 'coup');
+      return;
+    }
+
+    // Target must lose an influence (has multiple cards to choose from)
     this.state.phase = {
       type: 'card_selection',
       description: 'Target must lose an influence'
@@ -652,7 +807,20 @@ export class CoupGame {
    * Execute Assassinate action
    */
   private executeAssassinate(actor: Player, targetId: string): void {
-    // Target must lose an influence
+    const target = this.getPlayerById(targetId);
+    if (!target) {
+      return;
+    }
+
+    // Check if target has only 1 unrevealed card - auto-lose it
+    const unrevealedCards = target.influences.filter(c => !c.isRevealed);
+    if (unrevealedCards.length === 1) {
+      // Auto-lose the only card
+      this.autoLoseInfluence(target, 'assassination');
+      return;
+    }
+
+    // Target must lose an influence (has multiple cards to choose from)
     this.state.phase = {
       type: 'card_selection',
       description: 'Target must lose an influence'
@@ -687,9 +855,14 @@ export class CoupGame {
 
   /**
    * Execute Exchange action (Ambassador)
-   * OFFICIAL RULE: Draw 2 cards, have 4 total, choose 2 to keep, return 2 to deck
+   * OFFICIAL RULE: Draw 2 cards, have original + 2 new, choose same number as original to keep
+   * Example: If player has 1 card, draws 2, chooses 1 of 3 to keep
    */
   private executeExchange(actor: Player): void {
+    // Count how many unrevealed cards the player currently has
+    const unrevealedCards = actor.influences.filter(c => !c.isRevealed);
+    const originalCardCount = unrevealedCards.length;
+
     // Draw 2 cards from deck
     const drawnCards: Character[] = [];
     for (let i = 0; i < GAME_CONSTANTS.AMBASSADOR_DRAW_COUNT; i++) {
@@ -698,10 +871,10 @@ export class CoupGame {
       }
     }
 
-    // Create array with all 4 cards (2 original unrevealed + 2 drawn)
+    // Create array with all cards (original unrevealed + 2 drawn)
     const allCards: Card[] = [
-      ...actor.influences.filter(c => !c.isRevealed),  // Original 2 cards
-      ...drawnCards.map(char => ({ character: char, isRevealed: false }))  // 2 drawn cards
+      ...unrevealedCards,
+      ...drawnCards.map(char => ({ character: char, isRevealed: false }))
     ];
 
     // Store in pendingAction for UI to access
@@ -719,16 +892,17 @@ export class CoupGame {
     });
 
     // Phase will be 'card_selection' for choosing cards
+    const totalCards = allCards.length;
     this.state.phase = {
       type: 'card_selection',
-      description: 'Choose 2 cards to keep from 4 available'
+      description: `Choose ${originalCardCount} card(s) to keep from ${totalCards} available`
     };
   }
 
   /**
-   * Complete Ambassador Exchange - player chooses 2 of 4 cards to keep
+   * Complete Ambassador Exchange - player chooses cards to keep
    * @param playerId - ID of player doing exchange
-   * @param cardIndices - Indices (0-3) of the 2 cards to keep from the 4 available
+   * @param cardIndices - Indices of cards to keep (number equals original card count)
    */
   public completeExchange(playerId: string, cardIndices: number[]): void {
     if (!this.state.pendingAction || 
@@ -737,21 +911,28 @@ export class CoupGame {
       throw new Error('No pending exchange action');
     }
 
-    if (cardIndices.length !== 2) {
-      throw new Error('Must select exactly 2 cards');
-    }
-
     const actor = this.getPlayerById(playerId);
     if (!actor || actor.id !== this.state.pendingAction.action.actorId) {
       throw new Error('Invalid player');
+    }
+
+    // Calculate how many cards the player should keep (same as original unrevealed count)
+    const originalCardCount = actor.influences.filter(c => !c.isRevealed).length;
+    
+    if (cardIndices.length !== originalCardCount) {
+      throw new Error(`Must select exactly ${originalCardCount} card(s)`);
     }
 
     const allCards = this.state.pendingAction.ambassadorAllCards;
     const cardsToKeep = cardIndices.map(idx => allCards[idx]);
     const cardsToReturn = allCards.filter((_, idx) => !cardIndices.includes(idx));
 
-    // Update player's influences to the 2 chosen cards
-    actor.influences = cardsToKeep.map(card => ({ ...card, isRevealed: false }));
+    // Remove old unrevealed influences and add new ones, keeping revealed cards
+    const revealedCards = actor.influences.filter(c => c.isRevealed);
+    actor.influences = [
+      ...revealedCards,
+      ...cardsToKeep.map(card => ({ ...card, isRevealed: false }))
+    ];
 
     // Return the other 2 cards to deck
     cardsToReturn.forEach(card => {

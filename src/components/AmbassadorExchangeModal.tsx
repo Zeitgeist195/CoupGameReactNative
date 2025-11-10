@@ -10,13 +10,15 @@ import { COLORS } from '../constants/colors';
 
 interface AmbassadorExchangeModalProps {
   visible: boolean;
-  allCards: Card[];  // All 4 cards (2 original + 2 drawn)
+  allCards: Card[];  // All cards (original + drawn)
+  cardsToKeep: number;  // Number of cards to select (same as original count)
   onComplete: (cardIndices: number[]) => void;
 }
 
 export default function AmbassadorExchangeModal({
   visible,
   allCards,
+  cardsToKeep,
   onComplete,
 }: AmbassadorExchangeModalProps) {
   const { t } = useTranslation();
@@ -28,9 +30,9 @@ export default function AmbassadorExchangeModal({
         // Deselect
         return prev.filter(i => i !== index);
       } else {
-        // Select (max 2)
-        if (prev.length >= 2) {
-          return prev;  // Already have 2 selected
+        // Select (up to cardsToKeep)
+        if (prev.length >= cardsToKeep) {
+          return prev;  // Already have max selected
         }
         return [...prev, index];
       }
@@ -38,7 +40,7 @@ export default function AmbassadorExchangeModal({
   };
 
   const handleConfirm = () => {
-    if (selectedIndices.length === 2) {
+    if (selectedIndices.length === cardsToKeep) {
       onComplete(selectedIndices);
       setSelectedIndices([]);
     }
@@ -52,10 +54,14 @@ export default function AmbassadorExchangeModal({
       <PaperCard style={styles.card}>
         <PaperCard.Content>
           <Text variant="headlineSmall" style={styles.title}>
-            {t('game.ambassadorExchange', { defaultValue: 'Troca do Diplomata' })}
+            {t('game.ambassadorExchange', { defaultValue: 'Troca do Embaixador' })}
           </Text>
           <Text variant="bodyMedium" style={styles.subtitle}>
-            {t('game.select2Of4', { defaultValue: 'Escolha 2 das 4 cartas para manter' })}:
+            {t('game.selectCards', { 
+              count: cardsToKeep,
+              total: allCards.length,
+              defaultValue: `Escolha ${cardsToKeep} ${cardsToKeep === 1 ? 'carta' : 'cartas'} das ${allCards.length} para manter` 
+            })}:
           </Text>
 
           <View style={styles.cardsContainer}>
@@ -82,15 +88,16 @@ export default function AmbassadorExchangeModal({
 
           <Text variant="bodySmall" style={styles.hint}>
             {t('game.selectedCount', { 
-              count: selectedIndices.length, 
-              defaultValue: `Selecionadas: ${selectedIndices.length}/2` 
+              count: selectedIndices.length,
+              total: cardsToKeep,
+              defaultValue: `Selecionadas: ${selectedIndices.length}/${cardsToKeep}` 
             })}
           </Text>
 
           <Button
             mode="contained"
             onPress={handleConfirm}
-            disabled={selectedIndices.length !== 2}
+            disabled={selectedIndices.length !== cardsToKeep}
             style={styles.confirmButton}
             buttonColor={COLORS.buttonPrimary}
           >

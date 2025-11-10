@@ -13,11 +13,13 @@ import ActionButtons from '../components/ActionButtons';
 import ChallengeBlockModal from '../components/ChallengeBlockModal';
 import CardSelectionModal from '../components/CardSelectionModal';
 import AmbassadorExchangeModal from '../components/AmbassadorExchangeModal';
+import NarrativeModal from '../components/NarrativeModal';
 import GameLog from '../components/GameLog';
 import Toast from '../components/Toast';
 import { useTranslation } from 'react-i18next';
 import { COLORS } from '../constants/colors';
-import { Character, ActionType } from '../types';
+import { Character, ActionType, Player } from '../types';
+import { getCharacterName } from '../i18n';
 
 const { width } = Dimensions.get('window');
 
@@ -26,26 +28,136 @@ export default function GameScreen({ navigation }: any) {
   const { gameState, game, dispatch } = useGame();
   const [showCards, setShowCards] = useState(false);
   const [showLogModal, setShowLogModal] = useState(false);
+  const [narrativeModal, setNarrativeModal] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    onDismiss: () => void;
+  } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning'; visible: boolean }>({
     message: '',
     type: 'info',
     visible: false,
   });
-  const previousLogLength = React.useRef(gameState.gameLog.length);
+  const previousLogLength = React.useRef(gameState?.gameLog?.length || 0);
+
+  // Redirect to Setup if gameState is null (game was reset)
+  useEffect(() => {
+    if (!gameState) {
+      navigation.navigate('Setup');
+      return;
+    }
+  }, [gameState, navigation]);
 
   useEffect(() => {
-    if (gameState.gameOver) {
+    if (gameState && gameState.gameOver) {
       navigation.navigate('GameOver');
     }
-  }, [gameState.gameOver, navigation]);
+  }, [gameState?.gameOver, navigation]);
+
+  // Show narrative modal when entering narrative phase or when auto-lose happens
+  useEffect(() => {
+    if (!gameState) return;
+    
+    const phaseType = gameState.phase?.type;
+    const challenge = gameState.pendingAction?.challenge;
+    
+    // Check for auto-lose influence events (player has only 1 card)
+    if (gameState.gameLog.length > previousLogLength.current) {
+      const newLogEntry = gameState.gameLog[gameState.gameLog.length - 1];
+      
+      if (newLogEntry.translationKey === 'log.auto_influence_lost_coup' ||
+          newLogEntry.translationKey === 'log.auto_influence_lost_assassination' ||
+          newLogEntry.translationKey === 'log.auto_influence_lost_challenge') {
+        const params = newLogEntry.translationParams || {};
+        let title = '';
+        let message = '';
+        
+        if (newLogEntry.translationKey === 'log.auto_influence_lost_coup') {
+          title = t('narrative.coup.title', { defaultValue: 'Golpe de Estado!' });
+          message = t('narrative.coup.message', {
+            defaultValue: '{{playerName}} tinha apenas uma carta e perdeu {{character}} automaticamente.',
+            playerName: params.playerName,
+            character: t(`characters.${params.character}`, { defaultValue: params.character })
+          });
+        } else if (newLogEntry.translationKey === 'log.auto_influence_lost_assassination') {
+          title = t('narrative.assassination.title', { defaultValue: 'Assassinato!' });
+          message = t('narrative.assassination.message', {
+            defaultValue: '{{playerName}} tinha apenas uma carta e perdeu {{character}} automaticamente.',
+            playerName: params.playerName,
+            character: t(`characters.${params.character}`, { defaultValue: params.character })
+          });
+        } else if (newLogEntry.translationKey === 'log.auto_influence_lost_challenge') {
+          title = t('narrative.challenge.title', { defaultValue: 'Perda de Influência!' });
+          message = t('narrative.challenge.message', {
+            defaultValue: '{{playerName}} tinha apenas uma carta e perdeu {{character}} automaticamente.',
+            playerName: params.playerName,
+            character: t(`characters.${params.character}`, { defaultValue: params.character })
+          });
+        }
+        
+        const modalData = {
+          visible: true,
+          title,
+          message,
+          onDismiss: () => {
+            setNarrativeModal(null);
+          }
+        };
+        setNarrativeModal(modalData);
+        previousLogLength.current = gameState.gameLog.length;
+        return;
+      }
+    }
+    
+    // If we're in narrative phase and don't have a modal yet, create one
+    if (phaseType === 'narrative' && !narrativeModal && challenge) {
+      // Find the relevant log entry
+      const challengeLog = gameState.gameLog
+        .slice()
+        .reverse()
+        .find(log => log.translationKey === 'log.challenge_failed' || log.translationKey === 'log.challenge_success');
+      
+      if (challengeLog) {
+        const params = challengeLog.translationParams || {};
+        const isFailed = challengeLog.translationKey === 'log.challenge_failed';
+        
+        const modalData = {
+          visible: true,
+          title: isFailed ? 'Desafio Falhou!' : 'Desafio Bem-Sucedido!',
+          message: isFailed
+            ? `${params.targetName} revelou ${t(`characters.${params.character}`, { defaultValue: params.character })}! ${params.challengerName} perdeu o desafio e deve perder uma influência.`
+            : `${params.targetName} não tinha ${t(`characters.${params.character}`, { defaultValue: params.character })}! ${params.targetName} deve perder uma influência.`,
+          onDismiss: () => {
+            setNarrativeModal(null);
+            // Advance from narrative phase to card selection
+            dispatch({ type: 'ADVANCE_FROM_NARRATIVE' });
+          }
+        };
+        setNarrativeModal(modalData);
+      }
+    }
+  }, [gameState?.phase?.type, gameState?.pendingAction?.challenge, gameState?.gameLog, narrativeModal, dispatch, t]);
 
   // Mostrar toast quando há nova entrada no log
   useEffect(() => {
+    if (!gameState || !gameState.gameLog) return;
+    
     if (gameState.gameLog.length > previousLogLength.current) {
       const newLogEntry = gameState.gameLog[gameState.gameLog.length - 1];
       const logMessage = newLogEntry.message || '';
       const logLower = logMessage.toLowerCase();
       
+      // Don't show toast for challenge events or auto-lose events - narrative modal handles those
+      if (newLogEntry.translationKey === 'log.challenge_failed' || 
+          newLogEntry.translationKey === 'log.challenge_success' ||
+          newLogEntry.translationKey === 'log.auto_influence_lost_coup' ||
+          newLogEntry.translationKey === 'log.auto_influence_lost_assassination' ||
+          newLogEntry.translationKey === 'log.auto_influence_lost_challenge') {
+        return;
+      }
+      
+      // Show toast for other events (only if no narrative modal)
       let type: 'success' | 'error' | 'info' | 'warning' = 'info';
       if (logLower.includes('eliminado') || logLower.includes('perde') || logLower.includes('loses')) {
         type = 'error';
@@ -62,10 +174,10 @@ export default function GameScreen({ navigation }: any) {
       });
     }
     previousLogLength.current = gameState.gameLog.length;
-  }, [gameState.gameLog]);
+  }, [gameState?.gameLog, t]);
 
-  const currentPlayer = game.getCurrentPlayer();
-  const otherPlayers = gameState.players.filter(
+  const currentPlayer = game?.getCurrentPlayer();
+  const otherPlayers = (gameState?.players || []).filter(
     (p) => p.id !== currentPlayer?.id
   );
 
@@ -94,6 +206,7 @@ export default function GameScreen({ navigation }: any) {
 
   const handleChallenge = (challengerId: string) => {
     try {
+      // Let the engine handle all the logic
       dispatch({ type: 'CHALLENGE_ACTION', payload: challengerId });
     } catch (error: any) {
       Alert.alert('Erro', error.message || 'Não foi possível desafiar a ação');
@@ -128,14 +241,12 @@ export default function GameScreen({ navigation }: any) {
   };
 
   const handleSelectCard = (cardIndex: number) => {
-    // Find the player who needs to select a card
-    const playerSelectingCard = gameState.players.find((p) => {
-      if (p.isEliminated) return false;
-      const aliveCards = p.influences.filter((c) => !c.isRevealed);
-      return aliveCards.length > 1;
-    });
-
+    if (!gameState) return;
+    
+    // Use the playerSelectingCard that was already determined above
+    // This uses engine information to correctly identify who should lose
     const targetPlayer = playerSelectingCard || currentPlayer;
+    
     if (targetPlayer) {
       try {
         dispatch({
@@ -148,26 +259,72 @@ export default function GameScreen({ navigation }: any) {
     }
   };
 
-  const phaseType = gameState.phase.type;
+  // Early return if gameState is null (must be after all hooks)
+  if (!gameState) {
+    return null;
+  }
+
+  const phaseType = gameState?.phase?.type || 'action';
   const showChallengeBlockModal =
     phaseType === 'challenge' ||
     phaseType === 'counteraction' ||
     phaseType === 'challenge_counteraction';
 
+  // Don't show card selection modal if we're in narrative phase (waiting for modal to be dismissed)
   const showCardSelectionModal = phaseType === 'card_selection';
   
   // Check if this is an Ambassador Exchange
   const isAmbassadorExchange = 
     phaseType === 'card_selection' &&
-    gameState.pendingAction?.action.type === ActionType.EXCHANGE &&
-    gameState.pendingAction?.ambassadorAllCards;
+    gameState?.pendingAction?.action.type === ActionType.EXCHANGE &&
+    gameState?.pendingAction?.ambassadorAllCards;
 
   // Find the player who needs to select a card to lose (for non-exchange cases)
-  const playerSelectingCard = gameState.players.find((p) => {
-    if (p.isEliminated) return false;
-    const aliveCards = p.influences.filter((c) => !c.isRevealed);
-    return aliveCards.length > 1;
-  });
+  // Use engine information from challenge to determine who should lose
+  let playerSelectingCard: Player | undefined;
+  
+  if (gameState?.pendingAction?.challenge) {
+    // Use challenge information to determine who should lose
+    const challenge = gameState?.pendingAction?.challenge;
+    
+    // The engine sets phase.description correctly:
+    // - Failed challenge: "challenger.name must lose an influence" (challenger was wrong)
+    // - Successful challenge: "defender.name must lose an influence" (defender was caught lying)
+    
+    // Method 1: Parse from phase description (most reliable - engine sets this)
+    const description = gameState?.phase?.description || '';
+    // Description format: "PlayerName must lose an influence"
+    // Extract player name from description
+    const mustLoseMatch = description.match(/^(.+?)\s+must\s+lose/i);
+    if (mustLoseMatch) {
+      const playerNameFromDesc = mustLoseMatch[1].trim();
+      playerSelectingCard = (gameState?.players || []).find(p => 
+        p.name === playerNameFromDesc && !p.isEliminated
+      );
+    }
+    
+    // Method 2: Fallback - find by name inclusion (handles partial matches)
+    if (!playerSelectingCard) {
+      playerSelectingCard = (gameState?.players || []).find(p => 
+        description.includes(p.name) && !p.isEliminated
+      );
+    }
+    
+    // Method 3: Ultimate fallback - use challenge object structure
+    // This shouldn't be needed if description parsing works, but it's a safety net
+    // Note: We can't directly use challenge.challengerId or challenge.targetId
+    // because we need to know if challenge failed or succeeded
+    // The engine handles this in loseInfluence() method
+  }
+  
+  // Fallback: find player with multiple unrevealed cards
+  if (!playerSelectingCard) {
+    playerSelectingCard = (gameState?.players || []).find((p) => {
+      if (p.isEliminated) return false;
+      const aliveCards = p.influences.filter((c) => !c.isRevealed);
+      return aliveCards.length > 1;
+    });
+  }
 
   const getPhaseLabel = (phaseType: string): string => {
     switch (phaseType) {
@@ -261,10 +418,10 @@ export default function GameScreen({ navigation }: any) {
           {currentPlayer && (
             <View style={styles.turnInfo}>
               <Text variant="bodyMedium" style={styles.turnText}>
-                {t('log.player_turn', { playerName: currentPlayer.name })}
+                {t('log.player_turn', { playerName: currentPlayer?.name || '' })}
               </Text>
               <Text variant="bodySmall" style={styles.turnCoins}>
-                💰 {currentPlayer.coins} {t('game.coins')}
+                💰 {currentPlayer?.coins || 0} {t('game.coins')}
               </Text>
             </View>
           )}
@@ -277,12 +434,12 @@ export default function GameScreen({ navigation }: any) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.playersGrid}>
-          {gameState.players.map((player) => (
+          {(gameState?.players || []).map((player) => (
             <View key={player.id} style={styles.playerCardWrapper}>
               <PlayerCard
                 player={player}
-                isCurrentPlayer={player.id === currentPlayer.id}
-                showCards={showCards && player.id === currentPlayer.id}
+                isCurrentPlayer={player.id === currentPlayer?.id}
+                showCards={showCards && player.id === currentPlayer?.id}
               />
             </View>
           ))}
@@ -317,9 +474,9 @@ export default function GameScreen({ navigation }: any) {
         <ChallengeBlockModal
           visible={showChallengeBlockModal}
           gamePhase={phaseType}
-          pendingAction={gameState.pendingAction}
+          pendingAction={gameState?.pendingAction}
           currentPlayer={currentPlayer}
-          allPlayers={gameState.players}
+          allPlayers={gameState?.players || []}
           onChallenge={handleChallenge}
           onBlock={handleBlock}
           onSkip={
@@ -332,13 +489,14 @@ export default function GameScreen({ navigation }: any) {
         {isAmbassadorExchange ? (
           <AmbassadorExchangeModal
             visible={showCardSelectionModal}
-            allCards={gameState.pendingAction!.ambassadorAllCards!}
+            allCards={gameState?.pendingAction?.ambassadorAllCards || []}
+            cardsToKeep={currentPlayer?.influences.filter(c => !c.isRevealed).length || 1}
             onComplete={(cardIndices) => {
               try {
                 dispatch({
                   type: 'COMPLETE_EXCHANGE',
                   payload: {
-                    playerId: currentPlayer.id,
+                    playerId: currentPlayer?.id || '',
                     cardIndices,
                   },
                 });
@@ -363,9 +521,20 @@ export default function GameScreen({ navigation }: any) {
         {/* Game Log Modal */}
         <GameLogModal
           visible={showLogModal}
-          logs={gameState.gameLog}
+          logs={gameState?.gameLog || []}
           onDismiss={() => setShowLogModal(false)}
         />
+
+        {/* Narrative Modal - Highest priority, rendered last */}
+        {/* Show narrative modal when in narrative phase OR when modal state is set */}
+        {(phaseType === 'narrative' || narrativeModal) && narrativeModal && (
+          <NarrativeModal
+            visible={narrativeModal.visible}
+            title={narrativeModal.title}
+            message={narrativeModal.message}
+            onDismiss={narrativeModal.onDismiss}
+          />
+        )}
       </Portal>
 
       {/* Toast para feedback visual */}
@@ -381,6 +550,7 @@ export default function GameScreen({ navigation }: any) {
 
 // Componente Modal para Game Log
 function GameLogModal({ visible, logs, onDismiss }: { visible: boolean; logs: any[]; onDismiss: () => void }) {
+  const { t } = useTranslation();
   if (!visible) return null;
   
   return (
